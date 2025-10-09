@@ -1,0 +1,7 @@
+- [ ] Add padding channel
+- [ ] Modify CMAES random sampling
+- [ ] Use random non-local connections. small world networks?
+- [ ] Check for unseen colors when voting
+- [ ] Use low rank matrices
+- [ ] Randomize color remapping
+- [ ] Fix solver early exit
