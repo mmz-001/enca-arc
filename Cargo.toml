@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["enca", "cmaes"]
+
+[profile.release]
+# lto = "thin"
+
+
+[profile.profiling]
+inherits = "release"
+debug = true
+
+

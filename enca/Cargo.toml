@@ -1,0 +1,31 @@
+[package]
+name = "enca"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rand = "0.9.0"
+itertools = "0.14.0"
+rayon = "1.11.0"
+rand_distr = "0.5.1"
+macroquad = "0.4.14"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+ndarray ={ version ="0.16.1", features = ["serde"] }
+ndarray-rand = "0.15.0"
+ndarray-stats = "0.6.0"
+cmaes = { path = "../cmaes" }
+clap = { version = "4.5.46", features = ["derive"] }
+nalgebra = "0.34.0"
+criterion = { version = "0.7.0", features = ["html_reports"] }
+mimalloc = "0.1.48"
+chrono = { version = "0.4.42", features = ["clock"] }
+indexmap = "2.11.1"
+indicatif = { version = "0.18.0", features = ["rayon"] }
+rand_chacha = "0.9.0"
+
+
+
+[[bench]]
+name = "bench_nca"
+harness = false

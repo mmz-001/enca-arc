@@ -1,0 +1,262 @@
+use std::fs;
+use std::time::Instant;
+
+use clap::Parser;
+use enca::augment::{TaskECAEnsembles, augment};
+use enca::config::Config;
+use enca::criteria::train_preserves_grid_size;
+use enca::metrics::{OverallSummary, TaskReport, TrainOutput};
+use enca::serde_utils::JSONReadWrite;
+use enca::utils::{mean, timestamp_for_dir};
+use enca::voting::vote;
+use enca::{dataset::Dataset, env::eval, solver::train};
+use indicatif::{ProgressBar, ProgressStyle};
+use itertools::Itertools;
+use rayon::prelude::*;
+
+struct TestOutcome {
+    count: usize,
+    correct: usize,
+}
+
+#[derive(Parser, Debug)]
+struct Args {
+    /// Task ID for running on single task
+    #[arg(short = 'i', long)]
+    id: Option<String>,
+    /// Tasks JSON file
+    #[arg(short = 't', long)]
+    tasks_path: String,
+    /// Solutions JSON file for evaluation
+    #[arg(short = 'a', long)]
+    solutions_path: String,
+    /// Run output directory. Defaults to a timestamped directory in runs/
+    #[arg(short = 'r', long)]
+    out_dir: Option<String>,
+    /// Seed for reproducibility
+    #[arg(short = 's', long)]
+    seed: Option<u64>,
+}
+
+fn main() {
+    let args = Args::parse();
+    let tasks_path = args.tasks_path;
+    let solutions_path = args.solutions_path;
+    let verbose = args.id.is_some();
+
+    let seed = if let Some(seed) = args.seed {
+        seed
+    } else {
+        rand::random()
+    };
+
+    let dataset = Dataset::load(&tasks_path, Some(&solutions_path));
+    println!(
+        "Loaded tasks from '{}' and solutions from '{}': tasks={}",
+        tasks_path,
+        solutions_path,
+        dataset.tasks.len()
+    );
+
+    let out_dir = if let Some(out_dir) = args.out_dir {
+        out_dir
+    } else {
+        let timestamp = timestamp_for_dir();
+        format!("runs/{timestamp}")
+    };
+
+    let metrics_dir = format!("{out_dir}/metrics");
+    let model_dir = format!("{out_dir}/models");
+
+    fs::create_dir_all(&out_dir).unwrap_or_else(|e| panic!("Failed to create out_dir '{}': {}", out_dir, e));
+    fs::create_dir_all(&metrics_dir)
+        .unwrap_or_else(|e| panic!("Failed to create metrics_dir '{}': {}", metrics_dir, e));
+    fs::create_dir_all(&model_dir).unwrap_or_else(|e| panic!("Failed to create model_dir: {}", e));
+
+    if let Some(id) = &args.id {
+        println!("Running train for task with id : {}", id);
+    }
+
+    let tasks = if let Some(id) = &args.id {
+        vec![
+            dataset
+                .get_task(id)
+                .unwrap_or_else(|| panic!("Task with id={id} not found"))
+                .clone(),
+        ]
+    } else {
+        dataset.tasks.clone()
+    };
+
+    let solutions = if let Some(id) = &args.id {
+        vec![
+            dataset
+                .get_solution(id)
+                .unwrap_or_else(|| panic!("Solution with id={id} not found"))
+                .clone(),
+        ]
+    } else {
+        dataset.solutions.unwrap()
+    };
+
+    let tasks_and_solutions = tasks.iter().zip(&solutions).collect_vec();
+
+    let start = Instant::now();
+
+    let total = tasks.len() as u64;
+
+    let pb = ProgressBar::new(total);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}<{eta_precise}] {bar:40.cyan/blue} {pos}/{len} {percent:>3}% {per_sec} it/s",
+        )
+        .unwrap()
+        .progress_chars("##-"),
+    );
+
+    let config = Config::default();
+
+    let results: Vec<TestOutcome> = tasks_and_solutions
+        .par_iter()
+        .map(|(task, solution)| {
+            let task_id = &task.id;
+            // Test task io shapes match when train task shapes are all the same.
+            // We check this property for all data in `assertions.rs`
+
+            let outcome = if train_preserves_grid_size(task) {
+                let train_result = train(task, verbose, &config, seed);
+
+                let best_train_result = train_result[0].clone();
+                let TrainOutput {
+                    ensemble, train_accs, ..
+                } = best_train_result;
+                let n_ncas = ensemble.ncas.len();
+
+                let mut test_ensembles = Vec::with_capacity(task.test.len());
+
+                let mut test_accs: Vec<f32> = Vec::with_capacity(solution.outputs.len());
+                let solved_train = train_result
+                    .clone()
+                    .into_iter()
+                    .filter(|result| mean(&result.train_accs) == 1.0)
+                    .collect_vec();
+
+                let selected_train_result = if !solved_train.is_empty() {
+                    solved_train
+                } else {
+                    // Fallback
+                    train_result
+                };
+
+                for (input, output) in task.test_inputs().iter().zip(&solution.outputs) {
+                    let aug_ensembles = selected_train_result
+                        .iter()
+                        .map(|result| augment(input, task, result.ensemble.clone(), seed))
+                        .collect_vec();
+                    let top_k_aug_ensembles = vote(input, &aug_ensembles, 2, verbose);
+
+                    let top_aug_ensemble = if top_k_aug_ensembles.len() >= 2 {
+                        let attempt_1_acc = eval(input, output, &top_k_aug_ensembles[0]);
+                        let attempt_2_acc = eval(input, output, &top_k_aug_ensembles[1]);
+                        if attempt_1_acc > attempt_2_acc {
+                            &top_k_aug_ensembles[0]
+                        } else {
+                            &top_k_aug_ensembles[1]
+                        }
+                    } else {
+                        &top_k_aug_ensembles[0]
+                    };
+
+                    test_accs.push(eval(input, output, top_aug_ensemble));
+                    test_ensembles.push(top_aug_ensemble.clone());
+                }
+
+                let mut train_ensemble = test_ensembles[0].clone();
+                // Clear any color remappings
+                train_ensemble.transform_pipeline.steps.clear();
+
+                let task_ensembles = TaskECAEnsembles {
+                    train: train_ensemble,
+                    test: test_ensembles,
+                };
+
+                let train_mean = mean(&train_accs);
+                let test_mean = mean(&test_accs);
+
+                if verbose {
+                    println!("\n==> Task {}", task_id);
+                    println!("train_accs(%)={:?} | mean={:.5}", &train_accs, train_mean);
+                    println!("test_accs(%)={:?} | mean={:.5}", test_accs, test_mean);
+
+                    println!("Model summary: ncas={}", n_ncas);
+                }
+
+                let nca_path = format!("{model_dir}/{task_id}.json");
+                task_ensembles.write_json(&nca_path).unwrap();
+
+                // Persist per-task metrics report
+                let report = TaskReport {
+                    task_id: task_id.clone(),
+                    n_examples_train: task.train.len(),
+                    n_examples_test: task.test.len(),
+                    n_ncas,
+                    train_accs: train_accs.clone(),
+                    test_accs: test_accs.clone(),
+                    duration_ms: None,
+                };
+                let metrics_path = format!("{metrics_dir}/{task_id}.json");
+                report
+                    .write_json(&metrics_path)
+                    .unwrap_or_else(|e| panic!("Failed to create metrics file '{}': {}", metrics_path, e));
+
+                let test_correct = test_accs.iter().filter(|acc| **acc == 1.0).collect_vec().len();
+
+                TestOutcome {
+                    count: task.test.len(),
+                    correct: test_correct,
+                }
+            } else {
+                TestOutcome {
+                    count: task.test.len(),
+                    correct: 0,
+                }
+            };
+            pb.inc(1);
+            outcome
+        })
+        .collect();
+    pb.finish();
+
+    let count: usize = results.iter().map(|r| r.count).sum();
+    let test_correct: usize = results.iter().map(|r| r.correct).sum();
+    let n_tasks: usize = results.len();
+
+    let total_elapsed_ms = start.elapsed().as_millis();
+    let test_accuracy = test_correct as f32 / count as f32 * 100.0;
+
+    let summary = OverallSummary {
+        n_tasks,
+        total_test_grids: count,
+        total_test_correct: test_correct,
+        test_accuracy,
+        elapsed_ms: total_elapsed_ms,
+        seed,
+    };
+
+    let summary_path = format!("{out_dir}/summary.json");
+    summary
+        .write_json(&summary_path)
+        .unwrap_or_else(|e| panic!("Failed to create summary file '{}': {}", summary_path, e));
+
+    let config_path = format!("{out_dir}/config.json");
+    config
+        .write_json(&config_path)
+        .unwrap_or_else(|e| panic!("Failed to create config file '{}': {}", config_path, e));
+
+    println!("==== Overall Summary ====");
+    println!("tasks={}, total_test_grids={}", n_tasks, count);
+    println!("total_test_correct={}", test_correct);
+    println!("test_accuracy={:.2}%", test_accuracy);
+    println!("elapsed_ms={}", total_elapsed_ms);
+    println!("Metrics summary -> {}", summary_path);
+}

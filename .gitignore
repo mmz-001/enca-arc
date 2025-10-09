@@ -1,0 +1,6 @@
+*data/
+/target
+.aider*
+profile.json*
+.env
+plots/
