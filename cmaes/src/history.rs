@@ -131,7 +131,7 @@ impl History {
 /// Returns the median function value of the generation
 /// Assumes that `individuals` is already sorted by function value
 fn get_median_value(individuals: &[EvaluatedPoint]) -> f64 {
-    if individuals.len() % 2 == 0 {
+    if individuals.len().is_multiple_of(2) {
         (individuals[individuals.len() / 2 - 1].value() + individuals[individuals.len() / 2].value()) / 2.0
     } else {
         individuals[individuals.len() / 2].value()

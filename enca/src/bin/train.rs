@@ -2,9 +2,11 @@ use std::fs;
 use std::time::Instant;
 
 use clap::Parser;
-use enca::augment::{TaskECAEnsembles, augment};
+use enca::augment::{TaskNCAs, augment};
 use enca::config::Config;
 use enca::criteria::train_preserves_grid_size;
+use enca::executors::Backend;
+use enca::executors::gpu::CUDA;
 use enca::metrics::{OverallSummary, TaskReport, TrainOutput};
 use enca::serde_utils::JSONReadWrite;
 use enca::utils::{mean, timestamp_for_dir};
@@ -12,7 +14,6 @@ use enca::voting::vote;
 use enca::{dataset::Dataset, env::eval, solver::train};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use rayon::prelude::*;
 
 struct TestOutcome {
     count: usize,
@@ -21,7 +22,7 @@ struct TestOutcome {
 
 #[derive(Parser, Debug)]
 struct Args {
-    /// Task ID for running on single task
+    /// Task ID for running on a single task
     #[arg(short = 'i', long)]
     id: Option<String>,
     /// Tasks JSON file
@@ -36,6 +37,9 @@ struct Args {
     /// Seed for reproducibility
     #[arg(short = 's', long)]
     seed: Option<u64>,
+    /// Config file path
+    #[arg(short = 'c', long)]
+    config_path: Option<String>,
 }
 
 fn main() {
@@ -43,6 +47,17 @@ fn main() {
     let tasks_path = args.tasks_path;
     let solutions_path = args.solutions_path;
     let verbose = args.id.is_some();
+    let config = if let Some(config_path) = args.config_path {
+        Config::read_json(&config_path)
+            .unwrap_or_else(|e| panic!("Failed to read config file '{}': {}", &config_path, e))
+    } else {
+        Config::default()
+    };
+
+    // Initialize GPUs
+    if config.backend == Backend::GPU {
+        _ = &*CUDA;
+    }
 
     let seed = if let Some(seed) = args.seed {
         seed
@@ -114,118 +129,114 @@ fn main() {
         .progress_chars("##-"),
     );
 
-    let config = Config::default();
-
     let results: Vec<TestOutcome> = tasks_and_solutions
-        .par_iter()
+        .iter()
         .map(|(task, solution)| {
+            let start = Instant::now();
+            if !verbose {
+                pb.inc(1);
+            }
+
             let task_id = &task.id;
+
+            let default_outcome = TestOutcome {
+                count: task.test.len(),
+                correct: 0,
+            };
+
             // Test task io shapes match when train task shapes are all the same.
             // We check this property for all data in `assertions.rs`
+            if !train_preserves_grid_size(task) {
+                return default_outcome;
+            }
 
-            let outcome = if train_preserves_grid_size(task) {
-                let train_result = train(task, verbose, &config, seed);
+            let train_result = train(task, verbose, &config, seed);
 
-                let best_train_result = train_result[0].clone();
-                let TrainOutput {
-                    ensemble, train_accs, ..
-                } = best_train_result;
-                let n_ncas = ensemble.ncas.len();
+            let best_train_result = train_result[0].clone();
+            let TrainOutput { train_accs, .. } = best_train_result;
 
-                let mut test_ensembles = Vec::with_capacity(task.test.len());
+            let mut test_ncas = Vec::with_capacity(task.test.len());
 
-                let mut test_accs: Vec<f32> = Vec::with_capacity(solution.outputs.len());
-                let solved_train = train_result
-                    .clone()
-                    .into_iter()
-                    .filter(|result| mean(&result.train_accs) == 1.0)
-                    .collect_vec();
+            let mut test_accs = Vec::with_capacity(solution.outputs.len());
+            let solved_train = train_result
+                .clone()
+                .into_iter()
+                .filter(|result| mean(&result.train_accs) == 1.0)
+                .collect_vec();
 
-                let selected_train_result = if !solved_train.is_empty() {
-                    solved_train
-                } else {
-                    // Fallback
-                    train_result
-                };
-
-                for (input, output) in task.test_inputs().iter().zip(&solution.outputs) {
-                    let aug_ensembles = selected_train_result
-                        .iter()
-                        .map(|result| augment(input, task, result.ensemble.clone(), seed))
-                        .collect_vec();
-                    let top_k_aug_ensembles = vote(input, &aug_ensembles, 2, verbose);
-
-                    let top_aug_ensemble = if top_k_aug_ensembles.len() >= 2 {
-                        let attempt_1_acc = eval(input, output, &top_k_aug_ensembles[0]);
-                        let attempt_2_acc = eval(input, output, &top_k_aug_ensembles[1]);
-                        if attempt_1_acc > attempt_2_acc {
-                            &top_k_aug_ensembles[0]
-                        } else {
-                            &top_k_aug_ensembles[1]
-                        }
-                    } else {
-                        &top_k_aug_ensembles[0]
-                    };
-
-                    test_accs.push(eval(input, output, top_aug_ensemble));
-                    test_ensembles.push(top_aug_ensemble.clone());
-                }
-
-                let mut train_ensemble = test_ensembles[0].clone();
-                // Clear any color remappings
-                train_ensemble.transform_pipeline.steps.clear();
-
-                let task_ensembles = TaskECAEnsembles {
-                    train: train_ensemble,
-                    test: test_ensembles,
-                };
-
-                let train_mean = mean(&train_accs);
-                let test_mean = mean(&test_accs);
-
-                if verbose {
-                    println!("\n==> Task {}", task_id);
-                    println!("train_accs(%)={:?} | mean={:.5}", &train_accs, train_mean);
-                    println!("test_accs(%)={:?} | mean={:.5}", test_accs, test_mean);
-
-                    println!("Model summary: ncas={}", n_ncas);
-                }
-
-                let nca_path = format!("{model_dir}/{task_id}.json");
-                task_ensembles.write_json(&nca_path).unwrap();
-
-                // Persist per-task metrics report
-                let report = TaskReport {
-                    task_id: task_id.clone(),
-                    n_examples_train: task.train.len(),
-                    n_examples_test: task.test.len(),
-                    n_ncas,
-                    train_accs: train_accs.clone(),
-                    test_accs: test_accs.clone(),
-                    duration_ms: None,
-                };
-                let metrics_path = format!("{metrics_dir}/{task_id}.json");
-                report
-                    .write_json(&metrics_path)
-                    .unwrap_or_else(|e| panic!("Failed to create metrics file '{}': {}", metrics_path, e));
-
-                let test_correct = test_accs.iter().filter(|acc| **acc == 1.0).collect_vec().len();
-
-                TestOutcome {
-                    count: task.test.len(),
-                    correct: test_correct,
-                }
+            let selected_train = if solved_train.is_empty() {
+                train_result
             } else {
-                TestOutcome {
-                    count: task.test.len(),
-                    correct: 0,
-                }
+                solved_train
             };
-            pb.inc(1);
-            outcome
+
+            for (input, output) in task.test_inputs().iter().zip(&solution.outputs) {
+                let aug_ncas = selected_train
+                    .iter()
+                    .map(|result| augment(input, task, result.nca.clone(), seed, &config))
+                    .collect_vec();
+                let top_k_aug_ncas = vote(input, &aug_ncas, 2, verbose, config.backend.clone());
+
+                let top_aug_nca = if top_k_aug_ncas.len() >= 2 {
+                    let attempt_1_acc = eval(input, output, &top_k_aug_ncas[0], config.backend.clone());
+                    let attempt_2_acc = eval(input, output, &top_k_aug_ncas[1], config.backend.clone());
+                    if attempt_1_acc > attempt_2_acc {
+                        &top_k_aug_ncas[0]
+                    } else {
+                        &top_k_aug_ncas[1]
+                    }
+                } else {
+                    &top_k_aug_ncas[0]
+                };
+
+                test_accs.push(eval(input, output, top_aug_nca, config.backend.clone()));
+                test_ncas.push(top_aug_nca.clone());
+            }
+
+            let elapsed = start.elapsed().as_millis();
+
+            let task_ncas = TaskNCAs {
+                train: best_train_result.nca,
+                test: test_ncas,
+            };
+
+            let train_mean = mean(&train_accs);
+            let test_mean = mean(&test_accs);
+
+            if verbose {
+                println!("\n==> Task {}", task_id);
+                println!("train_accs(%)={:?} | mean={:.5}", &train_accs, train_mean);
+                println!("test_accs(%)={:?} | mean={:.5}", test_accs, test_mean);
+            }
+
+            let nca_path = format!("{model_dir}/{task_id}.json");
+            task_ncas.write_json(&nca_path).unwrap();
+
+            let report = TaskReport {
+                task_id: task_id.clone(),
+                n_examples_train: task.train.len(),
+                n_examples_test: task.test.len(),
+                train_accs: train_accs.clone(),
+                test_accs: test_accs.clone(),
+                duration_ms: Some(elapsed as usize),
+            };
+            let metrics_path = format!("{metrics_dir}/{task_id}.json");
+            report
+                .write_json(&metrics_path)
+                .unwrap_or_else(|e| panic!("Failed to create metrics file '{}': {}", metrics_path, e));
+
+            let test_correct = test_accs.iter().filter(|acc| **acc == 1.0).collect_vec().len();
+
+            TestOutcome {
+                count: task.test.len(),
+                correct: test_correct,
+            }
         })
         .collect();
-    pb.finish();
+
+    if !verbose {
+        pb.finish();
+    }
 
     let count: usize = results.iter().map(|r| r.count).sum();
     let test_correct: usize = results.iter().map(|r| r.correct).sum();

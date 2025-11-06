@@ -8,6 +8,7 @@ use rayon::prelude::*;
 use statrs::distribution::Normal;
 
 use crate::mode::Mode;
+use crate::objective_function::BatchObjectiveFunction;
 use crate::state::State;
 use crate::{ObjectiveFunction, ParallelObjectiveFunction};
 
@@ -180,6 +181,27 @@ impl<F: ParallelObjectiveFunction> Sampler<F> {
                         objective_function.evaluate_parallel(x)
                     })
                 })
+                .collect::<Result<Vec<_>, _>>()
+        })
+    }
+}
+
+impl<F: BatchObjectiveFunction> Sampler<F> {
+    pub fn sample_batch(
+        &mut self,
+        state: &State,
+        mode: Mode,
+        parallel_update: bool,
+    ) -> Result<Vec<EvaluatedPoint>, InvalidFunctionValueError> {
+        self.sample_internal(state, mode, parallel_update, |y, objective_function| {
+            let points = y
+                .iter()
+                .map(|yk| to_point(yk, state.mean(), state.sigma()))
+                .collect::<Vec<_>>();
+            let values = objective_function.evaluate_batch(&points);
+            y.into_iter()
+                .zip(values)
+                .map(|(yk, value)| EvaluatedPoint::new(yk, state.mean(), state.sigma(), |_| value))
                 .collect::<Result<Vec<_>, _>>()
         })
     }

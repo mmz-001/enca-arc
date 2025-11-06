@@ -17,28 +17,13 @@ where
     }
     u
 }
-
-pub fn mean(xs: &[f32]) -> f32 {
+pub fn mean<T>(xs: &[T]) -> T
+where
+    T: Copy + std::iter::Sum<T> + std::ops::Div<Output = T> + From<f32>,
+{
     if xs.is_empty() {
         panic!("Cannot compute mean of an empty array.")
     }
 
-    xs.iter().sum::<f32>() / xs.len() as f32
-}
-
-pub fn stddev(xs: &[f32]) -> f32 {
-    if xs.is_empty() {
-        panic!("Cannot compute standard deviation of an empty array.")
-    }
-    let m = mean(xs);
-    let n = xs.len() as f32;
-    let var = xs
-        .iter()
-        .map(|&x| {
-            let d = x - m;
-            d * d
-        })
-        .sum::<f32>()
-        / n;
-    var.sqrt()
+    xs.iter().copied().sum::<T>() / T::from(xs.len() as f32)
 }

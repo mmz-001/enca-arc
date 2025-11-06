@@ -2,81 +2,97 @@ use crate::{
     config::Config,
     constants::{RO_CH_RNG, RW_CH_RNG},
     dataset::TrainExample,
-    executors::NCAEnsembleExecutor,
+    executors::{
+        Backend, NCAExecutor,
+        cpu::NCAExecutorCpu,
+        gpu::{Individual, PopNCAExecutorGpuBatch},
+    },
     grid::Grid,
-    nca::NCAEnsemble,
+    nca::NCA,
     substrate::Substrate,
     utils::mean,
 };
 use itertools::Itertools;
 use ndarray::s;
 
-pub fn compute_fitness(example: &TrainExample, executor: &NCAEnsembleExecutor, config: &Config) -> f32 {
-    let mut executor = executor.clone();
-    executor.run();
+pub fn compute_fitness_pop(examples: &[TrainExample], ncas: Vec<NCA>, config: &Config) -> Vec<f64> {
+    let pop_size = ncas.len();
+    let grids = examples.iter().map(|example| &example.input).collect_vec();
 
-    let ensemble = &executor.ensemble;
+    let population = match config.backend {
+        Backend::CPU => {
+            let mut population = Vec::with_capacity(pop_size);
+            for nca in ncas {
+                let substrates = examples
+                    .iter()
+                    .map(|example| {
+                        let mut executor = NCAExecutorCpu::new(nca.clone(), &example.input);
+                        executor.run();
+                        executor.substrate
+                    })
+                    .collect_vec();
+                population.push(Individual { nca, substrates });
+            }
+            population
+        }
+        Backend::GPU => {
+            let mut executor = PopNCAExecutorGpuBatch::new(ncas, &grids);
+            executor.run();
+            executor.individuals
+        }
+    };
 
-    // The RW channels contain the output of the executor
-    let pred_vis_slice = s![.., .., RW_CH_RNG];
-    // The RO channels of the tgt substrate contain the ground truth.
-    let tgt_vis_slice = s![.., .., RO_CH_RNG];
+    let mut fitnesses = Vec::with_capacity(pop_size);
 
-    let pred_substrate = &executor.executors.last().unwrap().substrate;
-    let pred_vis_chs = pred_substrate.data.slice(pred_vis_slice);
+    for individual in population {
+        let mut fitness = 0.0f64;
+        let pred_substrates = individual.substrates;
+        let nca = individual.nca;
 
-    let mut tgt_grid = example.output.clone();
-    ensemble.transform_pipeline.apply(&mut tgt_grid);
-    let tgt_substrate = Substrate::from_grid(&tgt_grid);
-    let out_vis_chs = tgt_substrate.data.slice(tgt_vis_slice);
+        for (example, pred_substrate) in examples.iter().zip(pred_substrates) {
+            // The RW channels contain the output of the executor
+            let pred_vis_slice = s![.., .., RW_CH_RNG];
+            // The RO channels of the tgt substrate contain the ground truth.
+            let tgt_vis_slice = s![.., .., RO_CH_RNG];
 
-    let diff = &pred_vis_chs - &out_vis_chs;
-    let err = diff.pow2().mean().unwrap();
+            let pred_vis_chs = pred_substrate.data.slice(pred_vis_slice);
 
-    let mut oscillation_cost = 0.0;
-    let mut non_convergence_cost = 0.0;
-    let mut l2_weight_cost = 0.0;
-    let mut l1_weight_cost = 0.0;
+            let mut tgt_grid = example.output.clone();
+            nca.transform_pipeline.apply(&mut tgt_grid);
+            let tgt_substrate = Substrate::from_grid(&tgt_grid);
+            let out_vis_chs = tgt_substrate.data.slice(tgt_vis_slice);
 
-    for nca_executor in &executor.executors {
-        // Penalize for instability
-        oscillation_cost += (&nca_executor.prev_substrate.data - &nca_executor.substrate.data)
-            .pow2()
-            .mean()
-            .unwrap();
+            let diff = &pred_vis_chs - &out_vis_chs;
+            let err = diff.mapv(f64::from).pow2().mean().unwrap();
 
-        non_convergence_cost += if nca_executor.steps == nca_executor.nca.max_steps {
-            1.0
-        } else {
-            0.0
-        };
+            fitness += err
+        }
 
-        l2_weight_cost += mean(&nca_executor.nca.weights.iter().map(|w| w * w).collect_vec());
-        l1_weight_cost += mean(&nca_executor.nca.weights.iter().map(|w| w.abs()).collect_vec());
+        let l2_weight_cost = mean(&nca.weights.iter().map(|w| (*w as f64) * (*w as f64)).collect_vec());
+
+        fitness += config.l2_coeff * l2_weight_cost;
+
+        fitnesses.push(fitness / examples.len() as f64)
     }
 
-    err + config.oscillation_cost_coeff * oscillation_cost
-        + config.non_convergence_cost_coeff * non_convergence_cost
-        + config.l2_coeff * l2_weight_cost
-        + config.l1_coeff * l1_weight_cost
+    fitnesses
 }
 
 #[inline]
-pub fn inference(input: &Grid, ensemble: &NCAEnsemble) -> Grid {
-    let mut executor = NCAEnsembleExecutor::new(ensemble.clone(), input);
+pub fn inference(input: &Grid, nca: &NCA, backend: Backend) -> Grid {
+    let mut executor = NCAExecutor::new(nca.clone(), input, backend);
 
     executor.run();
 
-    let substrate = &executor.executors.last().unwrap().substrate;
-    let mut pred_grid = substrate.to_grid();
+    let mut pred_grid = executor.substrate().to_grid();
 
-    ensemble.transform_pipeline.revert(&mut pred_grid);
+    nca.transform_pipeline.revert(&mut pred_grid);
 
     pred_grid
 }
 
-pub fn eval(input: &Grid, output: &Grid, ensemble: &NCAEnsemble) -> f32 {
-    let pred_grid = inference(input, ensemble);
+pub fn eval(input: &Grid, output: &Grid, nca: &NCA, backend: Backend) -> f32 {
+    let pred_grid = inference(input, nca, backend);
     compute_accuracy(&pred_grid, output)
 }
 

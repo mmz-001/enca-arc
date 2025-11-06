@@ -171,6 +171,23 @@ impl ParallelObjectiveFunction for Box<dyn ParallelObjectiveFunction> {
     }
 }
 
+/// Like ['ObjectiveFunction'][ObjectiveFunction], but for batch objective function evaluation.
+pub trait BatchObjectiveFunction {
+    fn evaluate_batch(&self, xs: &[DVector<f64>]) -> Vec<f64>;
+}
+
+impl<F: Fn(&[DVector<f64>]) -> Vec<f64>> BatchObjectiveFunction for F {
+    fn evaluate_batch(&self, x: &[DVector<f64>]) -> Vec<f64> {
+        (self)(x)
+    }
+}
+
+impl BatchObjectiveFunction for Box<dyn BatchObjectiveFunction> {
+    fn evaluate_batch(&self, x: &[DVector<f64>]) -> Vec<f64> {
+        self.as_ref().evaluate_batch(x)
+    }
+}
+
 /// A type that wraps any [`ObjectiveFunction`] and scales the input vectors before passing them to
 /// the wrapped function.
 ///

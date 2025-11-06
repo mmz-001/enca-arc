@@ -1,9 +1,11 @@
 use crate::{
-    constants::{INP_CHS, INP_DIM, NHBD, NHBD_CENTER, NHBD_LEN, OUT_CHS, VIS_CHS},
+    constants::{INP_CHS, INP_DIM, N_BIASES, N_WEIGHTS, NHBD, NHBD_LEN, OUT_CHS, VIS_CHS},
     substrate::Substrate,
     transforms::TransformPipeline,
 };
 use mimalloc::MiMalloc;
+use rand::Rng;
+use rand_distr::Normal;
 use serde::{Deserialize, Serialize};
 
 #[global_allocator]
@@ -14,6 +16,7 @@ pub struct NCA {
     pub weights: Vec<f32>,
     pub biases: Vec<f32>,
     pub max_steps: usize,
+    pub transform_pipeline: TransformPipeline,
 }
 
 impl NCA {
@@ -21,32 +24,24 @@ impl NCA {
         let weights = vec![0.0; OUT_CHS * INP_DIM];
         let biases = vec![0.0; OUT_CHS];
 
-        let mut nca = Self {
+        Self {
             weights,
             biases,
             max_steps,
-        };
-
-        nca.initialize_identity();
-
-        nca
+            transform_pipeline: TransformPipeline::default(),
+        }
     }
 
-    /// Sets all weights and biases to zero
-    pub fn clear(&mut self) {
-        self.weights.fill(0.0);
-        self.biases.fill(0.0);
-    }
+    /// Initialize weights and biases with small random values
+    pub fn initialize_random(&mut self, rng: &mut impl Rng) {
+        let dist = Normal::new(0.0, 0.2).unwrap();
 
-    /// Initialize this NCA to pass through RW channels (copies RW input -> RW output).
-    /// Leaves hidden channels untouched.
-    pub fn initialize_identity(&mut self) {
-        // Copy RW visible channels: input RW bit -> output RW bit at center tap
-        for bit in 0..VIS_CHS {
-            let ch_in = VIS_CHS + bit; // RW input channel index in substrate
-            let col_idx = ch_in * NHBD_LEN + NHBD_CENTER;
-            // Row 'bit' corresponds to the RW output channel 'bit'
-            self.weights[bit * INP_DIM + col_idx] = 1.0;
+        for weight in self.weights.iter_mut() {
+            *weight = rng.sample(dist);
+        }
+
+        for bias in self.biases.iter_mut() {
+            *bias = rng.sample(dist);
         }
     }
 
@@ -75,7 +70,8 @@ impl NCA {
                     };
 
                     for inp_ch_idx in 0..INP_CHS {
-                        let neighbor_val = data[(ny as usize, nx as usize, inp_ch_idx)];
+                        let neighbor_val =
+                            unsafe { *data.get((ny as usize, nx as usize, inp_ch_idx)).unwrap_unchecked() };
 
                         // Alive masking
                         if neighbor_val < 0.5 {
@@ -86,14 +82,15 @@ impl NCA {
 
                         for i in 0..OUT_CHS {
                             let wi = i * INP_DIM + col_idx;
-                            out_buf[i] = f32::mul_add(neighbor_val, self.weights[wi], out_buf[i]);
+                            out_buf[i] =
+                                f32::mul_add(neighbor_val, unsafe { *self.weights.get_unchecked(wi) }, out_buf[i]);
                         }
                     }
                 }
 
                 // Update only writable channels.
                 for ch in 0..OUT_CHS {
-                    next[(y, x, ch + VIS_CHS)] = out_buf[ch]
+                    *unsafe { next.get_mut((y, x, ch + VIS_CHS)).unwrap_unchecked() } = out_buf[ch]
                 }
             }
         }
@@ -103,85 +100,27 @@ impl NCA {
         substrate.data = next;
     }
 
-    pub fn from_vec(params: Vec<f32>, max_steps: usize) -> Self {
+    pub fn from_vec(weights: &[f32], biases: &[f32], max_steps: usize) -> Self {
         let mut nca = Self::new(max_steps);
 
-        let weights_len = OUT_CHS * INP_DIM;
-        let biases_len = OUT_CHS;
-        let expected_total = weights_len + biases_len;
-        if params.len() != expected_total {
-            panic!(
-                "Expected {} total params ({} weights + {} biases); found {}",
-                expected_total,
-                weights_len,
-                biases_len,
-                params.len()
-            );
+        if weights.len() != N_WEIGHTS {
+            panic!("Expected {} weights; found {}", N_WEIGHTS, weights.len())
         }
 
-        nca.weights = params[..weights_len].to_vec();
-        nca.biases = params[weights_len..].to_vec();
+        if biases.len() != N_BIASES {
+            panic!("Expected {} biases; found {}", N_BIASES, biases.len());
+        }
+
+        nca.weights = weights.to_vec();
+        nca.biases = biases.to_vec();
 
         nca
     }
 
-    pub fn to_vec(&self) -> Vec<f64> {
+    pub fn to_vec(&self) -> Vec<f32> {
         let mut out = Vec::with_capacity(self.weights.len() + self.biases.len());
-        out.extend(self.weights.iter().map(|&x| x as f64));
-        out.extend(self.biases.iter().map(|&x| x as f64));
+        out.extend(self.weights.to_vec());
+        out.extend(self.biases.to_vec());
         out
-    }
-}
-
-/// Collection of NCA for a given task along with grid
-/// transformations applied during inference
-#[derive(Serialize, Deserialize, Clone)]
-pub struct NCAEnsemble {
-    pub task_id: String,
-    pub ncas: Vec<NCA>,
-    pub transform_pipeline: TransformPipeline,
-}
-
-impl NCAEnsemble {
-    pub fn new(ncas: Vec<NCA>, task_id: String) -> Self {
-        Self {
-            task_id,
-            ncas,
-            transform_pipeline: TransformPipeline { steps: vec![] },
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::{constants::RW_CH_RNG, executors::NCAExecutor};
-    use ndarray::{Array3, s};
-    use ndarray_rand::{RandomExt, rand_distr::Uniform};
-
-    #[test]
-    fn initialize_identity_no_change() {
-        let width = 10;
-        let height = 10;
-
-        let mut data = Array3::<f32>::random((height, width, INP_CHS), Uniform::new(0.0, 1.0));
-        data.mapv_inplace(|v| v.clamp(0.5, 1.0));
-
-        let substrate = Substrate { data, width, height };
-
-        let nca = NCA::new(30);
-
-        let mut executor = NCAExecutor::new(nca, substrate.clone());
-
-        executor.run();
-
-        println!("steps={}", executor.steps);
-
-        let rw_channels = s![.., .., RW_CH_RNG];
-        let diff = (&substrate.data.slice(rw_channels) - &executor.substrate.data.slice(rw_channels))
-            .abs()
-            .mean()
-            .unwrap();
-        assert!(diff <= 1e-12, "Substrate changed. diff={:.3e}", diff);
     }
 }

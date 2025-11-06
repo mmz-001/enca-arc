@@ -1,18 +1,16 @@
-use std::thread;
-
 use clap::Parser;
 use enca::{
-    augment::TaskECAEnsembles,
+    augment::TaskNCAs,
     dataset::{Dataset, Solution, Task},
     drawing::{display_visible_grid, draw_metrics, draw_params, draw_tooltip},
-    executors::NCAEnsembleExecutor,
+    executors::{Backend, NCAExecutor},
     grid::Grid,
     metrics::TaskReport,
     serde_utils::JSONReadWrite,
 };
-use itertools::Itertools;
 use macroquad::Window;
 use macroquad::{prelude::*, window::Conf};
+use std::thread;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -102,7 +100,7 @@ fn compute_layout(sw: f32, sh: f32) -> Layout {
 struct AppState {
     // Data
     dataset: Dataset,
-    task_ensembles: Vec<(String, TaskECAEnsembles)>,
+    task_ncas: Vec<(String, TaskNCAs)>,
     metrics: Vec<(String, TaskReport)>,
 
     // Selection
@@ -115,7 +113,7 @@ struct AppState {
     // Runtime
     input: Grid,
     output: Grid,
-    executor: NCAEnsembleExecutor,
+    executor: NCAExecutor,
     paused: bool,
     show_help: bool,
 
@@ -127,13 +125,13 @@ struct AppState {
 impl AppState {
     fn new(
         dataset: Dataset,
-        task_ensembles: Vec<(String, TaskECAEnsembles)>,
+        task_ncas: Vec<(String, TaskNCAs)>,
         metrics: Vec<(String, TaskReport)>,
         initial_task_idx: usize,
         fps: f64,
     ) -> Self {
-        let current_task_idx = initial_task_idx.min(task_ensembles.len().saturating_sub(1));
-        let current_task_id = task_ensembles[current_task_idx].0.clone();
+        let current_task_idx = initial_task_idx.min(task_ncas.len().saturating_sub(1));
+        let current_task_id = task_ncas[current_task_idx].0.clone();
 
         let current_task = dataset
             .get_task(&current_task_id)
@@ -150,11 +148,11 @@ impl AppState {
 
         let (input, output) = (&example.input, &example.output);
 
-        let executor = NCAEnsembleExecutor::new(task_ensembles[current_task_idx].1.train.clone(), input);
+        let executor = NCAExecutor::new(task_ncas[current_task_idx].1.train.clone(), input, Backend::CPU);
 
         AppState {
             dataset,
-            task_ensembles,
+            task_ncas,
             metrics,
             current_task_idx,
             current_task,
@@ -203,6 +201,18 @@ impl AppState {
             });
         }
 
+        if mouse_wheel().1 > 0.0 {
+            actions.push(Action::NextTask)
+        }
+
+        if mouse_wheel().1 < 0.0 {
+            actions.push(Action::PrevTask)
+        }
+
+        if is_key_pressed(KeyCode::C) && is_key_down(KeyCode::LeftControl) {
+            println!("task_id={}", self.current_task.id);
+        }
+
         actions
     }
 
@@ -230,19 +240,23 @@ impl AppState {
                     rebuild_needed = true;
                 }
                 Action::NextExample => {
-                    self.example_id = self.example_id.saturating_add(1);
+                    let num_examples = match self.split {
+                        Split::Train => self.current_task.train.len(),
+                        Split::Test => self.current_task.test.len(),
+                    };
+                    self.example_id = (self.example_id + 1).min(num_examples - 1);
                     rebuild_needed = true;
                 }
                 Action::PrevExample => {
-                    self.example_id = self.example_id.wrapping_sub(1);
+                    self.example_id = self.example_id.saturating_sub(1);
                     rebuild_needed = true;
                 }
                 Action::NextTask => {
-                    self.current_task_idx = (self.current_task_idx + 1) % self.task_ensembles.len();
+                    self.current_task_idx = (self.current_task_idx + 1) % self.task_ncas.len();
                     self.current_task = self
                         .dataset
-                        .get_task(&self.task_ensembles[self.current_task_idx].0)
-                        .unwrap_or_else(|| panic!("task_id={} not found", self.task_ensembles[self.current_task_idx].0))
+                        .get_task(&self.task_ncas[self.current_task_idx].0)
+                        .unwrap_or_else(|| panic!("task_id={} not found", self.task_ncas[self.current_task_idx].0))
                         .clone();
                     self.current_solution = self
                         .dataset
@@ -254,12 +268,11 @@ impl AppState {
                     rebuild_needed = true;
                 }
                 Action::PrevTask => {
-                    self.current_task_idx =
-                        (self.task_ensembles.len() + self.current_task_idx - 1) % self.task_ensembles.len();
+                    self.current_task_idx = (self.task_ncas.len() + self.current_task_idx - 1) % self.task_ncas.len();
                     self.current_task = self
                         .dataset
-                        .get_task(&self.task_ensembles[self.current_task_idx].0)
-                        .unwrap_or_else(|| panic!("task_id={} not found", self.task_ensembles[self.current_task_idx].0))
+                        .get_task(&self.task_ncas[self.current_task_idx].0)
+                        .unwrap_or_else(|| panic!("task_id={} not found", self.task_ncas[self.current_task_idx].0))
                         .clone();
                     self.current_solution = self
                         .dataset
@@ -281,7 +294,7 @@ impl AppState {
     fn rebuild_context(&mut self) {
         self.current_task = self
             .dataset
-            .get_task(&self.task_ensembles[self.current_task_idx].0)
+            .get_task(&self.task_ncas[self.current_task_idx].0)
             .unwrap_or_else(|| panic!("task_id={} missing", self.current_task.id))
             .clone();
         self.current_solution = self
@@ -317,14 +330,14 @@ impl AppState {
             }
         }
 
-        let mut ensemble = self.task_ensembles[self.current_task_idx].1.train.clone();
+        let mut nca = self.task_ncas[self.current_task_idx].1.train.clone();
 
         if self.split == Split::Test {
             // Use augmented version
-            ensemble = self.task_ensembles[self.current_task_idx].1.test[self.example_id].clone();
+            nca = self.task_ncas[self.current_task_idx].1.test[self.example_id].clone();
         }
 
-        self.executor = NCAEnsembleExecutor::new(ensemble, &self.input);
+        self.executor = NCAExecutor::new(nca, &self.input, Backend::CPU);
 
         // Reset sim timing flags
         self.paused = false;
@@ -338,9 +351,9 @@ impl AppState {
         self.acc += get_frame_time() as f64;
         let step_dt = 1.0 / self.fps;
 
-        while self.acc >= step_dt && self.executor.reasons.last().unwrap().is_none() {
-            self.executor.step();
+        while self.acc >= step_dt && !self.paused {
             self.acc -= step_dt;
+            self.paused = self.executor.step();
         }
     }
 
@@ -352,26 +365,24 @@ impl AppState {
         let l = compute_layout(sw, sh);
 
         // Work with the currently selected executor
-        let cur_idx = self.executor.curr_exec_idx;
-        let exec = &mut self.executor.executors[cur_idx];
+        let substrate = &self.executor.substrate();
 
         // Main grids
-        let mut grid = exec.substrate.clone().to_grid();
+        let mut grid = substrate.to_grid();
         let input = self.input.clone();
         let output = self.output.clone();
 
-        let transforms = &self.executor.ensemble.transform_pipeline;
+        let transforms = &self.executor.nca().transform_pipeline;
         transforms.revert(&mut grid);
 
         display_visible_grid(&grid, l.gx, l.gy, l.gs, l.gs);
         display_visible_grid(&input, l.igx, l.igy, l.cs, l.cs);
         display_visible_grid(&output, l.igx + l.ig_pad, l.gy, l.cs, l.cs);
 
-        exec.substrate
-            .display_channels_panel(l.igx, l.igy + l.ig_pad, l.gs * 1.1, l.gs / 1.4);
+        substrate.display_channels_panel(l.igx, l.igy + l.ig_pad, l.gs * 1.1, l.gs / 1.4);
 
         // Params UI
-        draw_params(l.params_x, l.params_y, l.params_w, l.params_h, cur_idx, &mut exec.nca);
+        draw_params(l.params_x, l.params_y, l.params_w, l.params_h, &self.executor.nca());
 
         let (clicked, tooltip) = draw_metrics(
             l.metrics_x,
@@ -384,7 +395,7 @@ impl AppState {
         );
 
         if let Some(task_id) = clicked
-            && let Some(idx) = self.task_ensembles.iter().position(|(id, _)| id == &task_id)
+            && let Some(idx) = self.task_ncas.iter().position(|(id, _)| id == &task_id)
             && idx != self.current_task_idx
         {
             {
@@ -402,41 +413,32 @@ impl AppState {
 
         // Status
         let status = format!(
-            "task_id={}, example_id={}, split={}",
-            &self.current_task.id, self.example_id, self.split
+            "task_id={}, example_id={}, split={}, steps={}/{}",
+            &self.current_task.id,
+            self.example_id,
+            self.split,
+            self.executor.steps(),
+            self.executor.nca().max_steps
         );
         draw_text(&status, l.gx, l.gy - 4.0, 24.0, WHITE);
-
-        let reasons = self
-            .executor
-            .reasons
-            .iter()
-            .enumerate()
-            .map(|(i, reason)| match reason {
-                Some(reason) => format!("nca_idx {i} : {}", reason),
-                None => format!("nca_idx {i} : None"),
-            })
-            .collect_vec()
-            .join("\n");
-        draw_multiline_text(&reasons, l.gx, l.gy + l.gs + 16.0, 16.0, None, WHITE);
     }
 }
 
 async fn draw(
     dataset: Dataset,
-    augmented_ensembles: Vec<(String, TaskECAEnsembles)>,
+    augmented_ncas: Vec<(String, TaskNCAs)>,
     metrics: Vec<(String, TaskReport)>,
     id: Option<String>,
 ) {
     let initial_task_idx = if let Some(ref id) = id {
-        augmented_ensembles.iter().position(|x| &x.0 == id).unwrap_or(0)
+        augmented_ncas.iter().position(|x| &x.0 == id).unwrap_or(0)
     } else {
         0
     };
 
     let mut app = AppState::new(
         dataset,
-        augmented_ensembles,
+        augmented_ncas,
         metrics,
         initial_task_idx,
         10.0, // fps
@@ -463,7 +465,7 @@ fn main() {
 
     let dataset = Dataset::load(&tasks_path, Some(&solutions_path));
 
-    let augmented_ensembles = TaskECAEnsembles::load(&models_dir).unwrap_or_else(|e| {
+    let augmented_ncas = TaskNCAs::load(&models_dir).unwrap_or_else(|e| {
         panic!("Failed to read run output models directory '{}': {}", models_dir, e);
     });
 
@@ -471,7 +473,7 @@ fn main() {
         panic!("Failed to read run output models directory '{}': {}", metrics_dir, e);
     });
 
-    if augmented_ensembles.is_empty() {
+    if augmented_ncas.is_empty() {
         panic!("No models found in {models_dir}");
     }
 
@@ -488,7 +490,7 @@ fn main() {
                 sample_count: 16,
                 ..Default::default()
             },
-            draw(dataset, augmented_ensembles, metrics, args.id),
+            draw(dataset, augmented_ncas, metrics, args.id),
         );
     })
     .join()

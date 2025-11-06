@@ -276,7 +276,7 @@ impl Transform {
 
 /// List of transforms that are applied sequentially applied
 /// in order and sequentially reverted in reverse order.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct TransformPipeline {
     pub steps: Vec<Transform>,
 }
