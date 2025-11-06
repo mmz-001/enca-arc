@@ -13,8 +13,8 @@ Linux setup
 ```shell
 sudo apt update && sudo apt install git build-essential -y
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && . "$HOME/.cargo/env"
-git clone https://github.com/mmz-001/enca
-cd enca/enca
+git clone https://github.com/mmz-001/enca-arc
+cd enca/enca-arc
 ```
 
 Run all commands below in `/enca` package.
