@@ -16,7 +16,7 @@ This release introduces experimental multi-GPU inference and a simplified archit
 
 - Simplify fitness function. It now uses only the mean pixel-wise MSE and L2 weight regularization. The L1, oscillation, and non-convergence penalties were removed.
 
-- Introduce sparse parameter updates. Full CMA-ES covariance evaluation is computationally infeasible at higher parameter counts, so it is now computed on random subsets of parameters. The training code was overhauled to address training dynamics introduced by sparse updates. See `/enca/src/solver` for implementation details.
+- Introduce sparse parameter updates. Full CMA-ES covariance evaluation is computationally infeasible at higher parameter counts, so it is now computed on random subsets of parameters. The training code was overhauled to address training dynamics introduced by sparse updates. See `/enca/src/solver.rs` for implementation details.
 
 ## [1.0.0] - 2025-10-09
 
