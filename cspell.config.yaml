@@ -1,7 +1,0 @@
-version: '0.2'
-ignorePaths: []
-dictionaryDefinitions: []
-dictionaries: []
-words: [macroquad, enca, 'ncas', 'mnca', 'cmaes', 'accs', 'evals']
-ignoreWords: []
-import: []

@@ -117,6 +117,7 @@ pub use nalgebra::DVector;
 pub use crate::functions::*;
 pub use crate::history::MAX_HISTORY_LENGTH;
 pub use crate::mode::Mode;
+use crate::objective_function::BatchObjectiveFunction;
 pub use crate::objective_function::{ObjectiveFunction, ParallelObjectiveFunction};
 pub use crate::options::CMAESOptions;
 pub use crate::parameters::Weights;
@@ -589,6 +590,48 @@ impl<F: ParallelObjectiveFunction> CMAES<F> {
     pub fn next_parallel(&mut self) -> Option<TerminationData> {
         // Sample individuals
         let individuals = match self.sample_parallel() {
+            Ok(x) => x,
+            Err(_) => {
+                return Some(self.get_termination_data(vec![TerminationReason::InvalidFunctionValue]));
+            }
+        };
+
+        self.next_internal(&individuals)
+    }
+}
+
+impl<F: BatchObjectiveFunction> CMAES<F> {
+    /// Like [`run`][Self::run], but executes the objective function in a batch. Requires that `F` implements
+    /// [`BatchObjectiveFunction`][crate::objective_function::BatchObjectiveFunction].
+    pub fn run_batch(&mut self) -> TerminationData {
+        let result = loop {
+            if let Some(data) = self.next_batch() {
+                break data;
+            }
+        };
+
+        self.run_internal(&result);
+
+        result
+    }
+
+    /// Like `sample`, but evaluates a batch of sample points.
+    fn sample_batch(&mut self) -> Result<Vec<EvaluatedPoint>, InvalidFunctionValueError> {
+        let individuals =
+            self.sampler
+                .sample_batch(&self.state, self.parameters.mode(), self.parameters.parallel_update())?;
+
+        self.sample_internal(&individuals);
+
+        Ok(individuals)
+    }
+
+    /// Like [`next`][Self::next], but executes the objective function in a batch. Requires that `F` implements
+    /// [`BatchObjectiveFunction`][crate::objective_function::BatchObjectiveFunction].
+    ///
+    pub fn next_batch(&mut self) -> Option<TerminationData> {
+        // Sample individuals
+        let individuals = match self.sample_batch() {
             Ok(x) => x,
             Err(_) => {
                 return Some(self.get_termination_data(vec![TerminationReason::InvalidFunctionValue]));

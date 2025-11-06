@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     constants::{HID_CHS, INP_DIM, OUT_CHS, VIS_CHS},
     dataset::Dataset,
@@ -8,6 +6,7 @@ use crate::{
     nca::NCA,
     substrate::Substrate,
 };
+use indexmap::IndexMap;
 use itertools::Itertools;
 use macroquad::prelude::*;
 
@@ -100,14 +99,13 @@ impl Substrate {
     }
 }
 
-pub fn draw_params(x: f32, y: f32, w: f32, h: f32, nca_id: usize, nca: &mut NCA) {
+pub fn draw_params(x: f32, y: f32, w: f32, h: f32, nca: &NCA) {
     draw_rectangle_lines(x, y, w, h, 1.0, WHITE.with_alpha(0.5));
 
     let shape = (OUT_CHS, INP_DIM);
     draw_text(
         &format!(
-            "nca_id={}, weights={}, biases={}, shape={:?}",
-            nca_id,
+            "weights={}, biases={}, shape={:?}",
             nca.weights.len(),
             nca.biases.len(),
             shape
@@ -177,7 +175,7 @@ pub fn draw_tooltip(x: f32, y: f32, lines: &[&str]) {
         by = (sh - h - 2.0).max(0.0);
     }
 
-    // Draw
+    // Border
     draw_rectangle(bx, by, w, h, BLACK.with_alpha(0.85));
     draw_rectangle_lines(bx, by, w, h, 1.0, WHITE.with_alpha(0.85));
 
@@ -189,6 +187,7 @@ pub fn draw_tooltip(x: f32, y: f32, lines: &[&str]) {
     }
 }
 
+type T = (Option<String>, Option<(f32, f32, Vec<String>)>);
 pub fn draw_metrics(
     x: f32,
     y: f32,
@@ -197,9 +196,9 @@ pub fn draw_metrics(
     dataset: &Dataset,
     metrics: &[(String, TaskReport)],
     selected_task_id: Option<&str>,
-) -> (Option<String>, Option<(f32, f32, Vec<String>)>) {
+) -> T {
     let metrics = metrics.iter().map(|i| (&i.0, &i.1)).collect_vec();
-    let metrics_map: HashMap<&String, &TaskReport> = HashMap::from_iter(metrics);
+    let metrics_map: IndexMap<&String, &TaskReport> = IndexMap::from_iter(metrics);
     let n_tasks = dataset.tasks.len();
 
     let n_rows = 10;

@@ -1,187 +1,216 @@
-use core::f32;
-
 use crate::config::Config;
-use crate::env::{compute_fitness, eval};
-use crate::executors::NCAEnsembleExecutor;
+use crate::constants::{BIASES_RNG, N_PARAMS, WEIGHTS_RNG};
+use crate::env::{compute_fitness_pop, eval};
 use crate::metrics::TrainOutput;
-use crate::nca::NCAEnsemble;
 use crate::selector::{Optimize, Score, TournamentSelector};
 use crate::utils::mean;
 use crate::{dataset::Task, nca::NCA};
+use cmaes::objective_function::BatchObjectiveFunction;
 use cmaes::{CMAESOptions, DVector, ObjectiveFunction};
+use core::f32;
 use itertools::Itertools;
+use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use rayon::prelude::*;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> Vec<TrainOutput> {
-    let selector = TournamentSelector::new(config.k, Optimize::Minimize);
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-
-    let mut nca = NCA::new(config.max_steps);
-    nca.clear(); // Start with params zeroed
-
-    let ncas = vec![nca];
-
-    let initial_ensemble = NCAEnsemble::new(ncas, task.id.clone());
-
-    let executors = task
-        .train
-        .iter()
-        .map(|example| NCAEnsembleExecutor::new(initial_ensemble.clone(), &example.input))
-        .collect_vec();
+    let selector = TournamentSelector::new(config.k, Optimize::Maximize);
 
     let individual = IndividualState {
-        executors,
+        nca: NCA::new(config.max_steps),
         task: task.clone(),
         fitness: f32::INFINITY,
         config: config.clone(),
+        train_param_idxs: vec![],
+        mean_acc: 0.0,
     };
 
-    let mut population = vec![individual; config.pop];
+    let mut population = vec![individual.clone(); config.pop];
 
-    for n in 0..config.max_ncas {
-        // Pre-generate independent seeds to avoid sharing RNG across threads
-        let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
-        let cmaes_initial_sigma = config.cmaes_initial_sigma;
-        let cmaes_max_fun_evals = config.cmaes_max_fun_evals;
+    // Pre-generate seeds
+    let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
 
+    for epoch in 0..config.epochs {
         if verbose {
-            println!("nca_id={n}")
+            println!("epoch={epoch}");
+        }
+
+        if epoch.is_multiple_of(10) {
+            let (unsolved, solved): (Vec<_>, Vec<_>) =
+                population.iter().partition(|individual| individual.mean_acc < 1.0);
+
+            let unsolved_selected = selector.select(&unsolved, &mut rng);
+
+            population = [
+                solved.into_iter().cloned().collect_vec(),
+                unsolved_selected.into_iter().cloned().collect_vec(),
+            ]
+            .concat();
+
+            if population.len() < config.pop {
+                let deficit = config.pop - population.len();
+                population.extend(vec![individual.clone(); deficit]);
+            }
         }
 
         population.par_iter_mut().enumerate().for_each(|(i, individual)| {
-            if n + 1 > individual.executors[0].ensemble.ncas.len() {
-                // Initialize with identity NCA
-                let nca = NCA::new(config.max_steps);
-                for executor in &mut individual.executors {
-                    executor.upsert_nca(nca.clone(), n);
-                }
-            }
+            let mut new_individual = individual.clone();
+            let new_nca = &mut new_individual.nca;
 
-            let ensemble = &individual.executors.first().unwrap().ensemble;
-            let initial_mean = ensemble.ncas.last().unwrap().to_vec();
+            let mut rng = ChaCha8Rng::seed_from_u64(seeds[i] + epoch as u64);
 
-            let mut cmaes_state = CMAESOptions::new(initial_mean, cmaes_initial_sigma.into())
-                // .enable_printing(if verbose { Some(5000) } else { None })
-                .tol_fun_hist(1e-7)
+            let mut idxs = (0..N_PARAMS).into_iter().collect_vec();
+            idxs.shuffle(&mut rng);
+
+            new_individual.train_param_idxs = idxs[0..(config.subset_size).min(idxs.len())].to_vec();
+
+            let all_params = new_nca.to_vec();
+            let initial_mean: Vec<f64> = new_individual
+                .train_param_idxs
+                .iter()
+                .map(|&i| all_params[i] as f64)
+                .collect();
+
+            let mut es_state = CMAESOptions::new(initial_mean, config.initial_sigma)
+                .tol_fun_hist(1e-12)
                 .fun_target(1e-7)
-                .seed(seeds[i])
-                .max_function_evals(cmaes_max_fun_evals)
-                .build(individual.clone())
+                .seed(seeds[i] + epoch as u64)
+                .max_function_evals(config.max_fun_evals)
+                .build(new_individual.clone())
                 .unwrap();
 
-            let results = cmaes_state.run();
+            let results = es_state.run_batch();
 
             let overall_best = results.overall_best.unwrap();
 
-            let cur_nca = NCA::from_vec(
-                overall_best.point.iter().map(|v| *v as f32).collect_vec(),
-                config.max_steps,
-            );
-            for executor in &mut individual.executors {
-                executor.upsert_nca(cur_nca.clone(), n);
-                executor.run();
+            let point = overall_best.point.clone();
+            let fitness = overall_best.value;
+
+            let new_nca = construct_nca(&new_individual, &point);
+
+            let accs = task
+                .train
+                .iter()
+                .map(|example| eval(&example.input, &example.output, &new_nca, config.backend.clone()))
+                .collect_vec();
+
+            let mean_acc = mean(&accs);
+
+            if mean_acc >= individual.mean_acc {
+                individual.nca = new_nca;
+                individual.fitness = fitness as f32;
+                individual.mean_acc = mean_acc;
+                individual.train_param_idxs = new_individual.train_param_idxs;
             }
-            individual.fitness = overall_best.value as f32;
         });
 
+        let solved = population
+            .iter()
+            .filter(|individual| individual.mean_acc == 1.0)
+            .count();
         if verbose {
-            let fitnesses: Vec<f32> = population.iter().map(|ind| ind.fitness).collect();
-            let best = fitnesses.iter().cloned().fold(f32::INFINITY, |a, b| a.min(b));
-            let worst = fitnesses.iter().cloned().fold(f32::NEG_INFINITY, |a, b| a.max(b));
-            let avg = mean(&fitnesses);
+            let best_fitness = population
+                .iter()
+                .map(|ind| ind.fitness)
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap();
+
+            let best_acc = population
+                .iter()
+                .map(|ind| ind.mean_acc)
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap();
+
             println!(
-                "Population summary: best={:.2e}, avg={:.2e}, worst={:.2e}",
-                best, avg, worst
-            );
+                "Pop solved: count={}/{} pct: {:.3}%, best fitness={:.3e}, best accuracy={:.3}",
+                solved,
+                population.len(),
+                solved as f32 / population.len() as f32 * 100.0,
+                best_fitness,
+                best_acc,
+            )
         }
-
-        if n == config.max_ncas - 1 {
-            break;
-        }
-
-        population = selector.select(&population, &mut rng);
     }
 
-    let mut train_ensembles = Vec::with_capacity(population.len());
+    let mut train_ncas = Vec::with_capacity(population.len());
 
     for individual in population {
-        let ensemble = individual.executors[0].ensemble.clone();
-
         let accs = task
             .train
             .iter()
-            .map(|example| eval(&example.input, &example.output, &ensemble))
+            .map(|example| eval(&example.input, &example.output, &individual.nca, config.backend.clone()))
             .collect_vec();
 
-        train_ensembles.push(TrainOutput {
-            ensemble,
+        let fitness = individual.fitness;
+
+        train_ncas.push(TrainOutput {
+            nca: individual.nca,
             train_accs: accs,
-            fitness: individual.fitness,
+            fitness,
         });
     }
 
-    train_ensembles.sort_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap());
+    train_ncas.sort_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap());
+    train_ncas.sort_by(|b, a| mean(&a.train_accs).partial_cmp(&mean(&b.train_accs)).unwrap());
 
-    if verbose {
-        let solved = train_ensembles
-            .iter()
-            .map(|ensemble| mean(&ensemble.train_accs) == 1.0)
-            .filter(|s| *s)
-            .count();
-
-        println!(
-            "Pop solved: count={}/{} pct: {:.3}%",
-            solved,
-            train_ensembles.len(),
-            solved as f32 / train_ensembles.len() as f32 * 100.0
-        )
-    }
-
-    train_ensembles
+    train_ncas
 }
 
 #[derive(Clone)]
 struct IndividualState {
     task: Task,
-    /// Executors for each example in the task.
-    /// Iteration starts from the last executor to avoid recomputing previous executors.
-    executors: Vec<NCAEnsembleExecutor>,
+    nca: NCA,
     fitness: f32,
+    mean_acc: f32,
     config: Config,
+    train_param_idxs: Vec<usize>,
 }
 
-impl Score for IndividualState {
-    fn score(&self) -> f32 {
-        self.fitness
+fn construct_nca(individual: &IndividualState, x: &DVector<f64>) -> NCA {
+    let mut all_params = individual.nca.to_vec();
+
+    for (j, idx) in individual.train_param_idxs.iter().enumerate() {
+        all_params[*idx] = x[j] as f32;
+    }
+
+    NCA::from_vec(
+        &all_params[WEIGHTS_RNG],
+        &all_params[BIASES_RNG],
+        individual.config.max_steps,
+    )
+}
+
+impl BatchObjectiveFunction for IndividualState {
+    fn evaluate_batch(&self, xs: &[DVector<f64>]) -> Vec<f64> {
+        let ncas = xs.iter().map(|x| construct_nca(self, x)).collect_vec();
+        compute_fitness_pop(&self.task.train, ncas, &self.config)
+    }
+}
+
+impl BatchObjectiveFunction for &mut IndividualState {
+    fn evaluate_batch(&self, x: &[DVector<f64>]) -> Vec<f64> {
+        IndividualState::evaluate_batch(self, x)
     }
 }
 
 impl ObjectiveFunction for IndividualState {
     fn evaluate(&mut self, x: &DVector<f64>) -> f64 {
-        let nca = NCA::from_vec(x.iter().map(|v| *v as f32).collect_vec(), self.config.max_steps);
-
-        let mut new_executors = self.executors.clone();
-        for executor in &mut new_executors {
-            executor.upsert_nca(nca.clone(), executor.ensemble.ncas.len() - 1);
-        }
-
-        mean(
-            &self
-                .task
-                .train
-                .iter()
-                .zip(new_executors)
-                .map(|(example, executor)| compute_fitness(example, &executor, &self.config))
-                .collect_vec(),
-        )
-        .into()
+        let ncas = vec![construct_nca(self, x)];
+        let examples = &self.task.train;
+        compute_fitness_pop(examples, ncas, &self.config)[0]
     }
 }
 
 impl ObjectiveFunction for &mut IndividualState {
     fn evaluate(&mut self, x: &DVector<f64>) -> f64 {
-        IndividualState::evaluate(*self, x)
+        IndividualState::evaluate(self, x)
+    }
+}
+
+impl Score for IndividualState {
+    fn score(&self) -> f32 {
+        self.mean_acc
     }
 }

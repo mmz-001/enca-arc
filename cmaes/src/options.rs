@@ -131,10 +131,10 @@ impl CMAESOptions {
     /// methods.
     ///
     /// - `initial_mean` should be set to a first guess at the solution and is used to determine the
-    /// problem dimension.
+    ///   problem dimension.
     /// - `initial_step_size` should be set to a first guess at how far the solution is in each
-    /// dimension from the initial mean (`solution[i] ~= [initial_mean[i] - initial_step_size,
-    /// initial_mean[i] + initial_step_size]`). Must be positive.
+    ///   dimension from the initial mean (`solution[i] ~= [initial_mean[i] - initial_step_size,
+    ///   initial_mean[i] + initial_step_size]`). Must be positive.
     pub fn new<V: Into<DVector<f64>>>(initial_mean: V, initial_step_size: f64) -> Self {
         let initial_mean = initial_mean.into();
         let dimensions = initial_mean.len();

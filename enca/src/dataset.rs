@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
@@ -51,8 +50,8 @@ pub struct Dataset {
 
 impl Dataset {
     pub fn load(tasks_path: &str, solutions_path: Option<&str>) -> Self {
-        let tasks_by_id: HashMap<String, ARCTask> =
-            <HashMap<String, ARCTask> as JSONReadWrite>::read_json(tasks_path).expect("Failed to read tasks JSON");
+        let tasks_by_id: IndexMap<String, ARCTask> =
+            <IndexMap<String, ARCTask> as JSONReadWrite>::read_json(tasks_path).expect("Failed to read tasks JSON");
 
         let mut tasks: Vec<Task> = tasks_by_id
             .into_iter()
@@ -82,8 +81,8 @@ impl Dataset {
 
         // Load solutions if provided
         let solutions = solutions_path.map(|sol_path| {
-            let sols_by_id: HashMap<String, ARCTestSolution> =
-                <HashMap<String, ARCTestSolution> as JSONReadWrite>::read_json(sol_path)
+            let sols_by_id: IndexMap<String, ARCTestSolution> =
+                <IndexMap<String, ARCTestSolution> as JSONReadWrite>::read_json(sol_path)
                     .expect("Failed to read solutions JSON");
 
             let mut sols: Vec<Solution> = sols_by_id
@@ -148,7 +147,7 @@ pub struct TestSubmissionOutput {
     pub attempt_2: ARCGrid,
 }
 
-pub type Submission = HashMap<String, Vec<TestSubmissionOutput>>;
+pub type Submission = IndexMap<String, Vec<TestSubmissionOutput>>;
 
 impl Default for TestSubmissionOutput {
     fn default() -> Self {

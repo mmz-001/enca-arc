@@ -1,0 +1,2 @@
+- [ ] Add padding channel
+- [ ] Use random non-local connections. small world networks?

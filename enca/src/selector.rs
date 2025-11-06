@@ -1,11 +1,11 @@
-use rand::Rng;
+use rand::{Rng, seq::SliceRandom};
 
 pub enum Optimize {
     Maximize,
     Minimize,
 }
 
-/// Tournament selection with replacement
+/// Tournament selection without replacement (global partition into tournaments).
 pub struct TournamentSelector {
     k: usize,
     mode: Optimize,
@@ -14,24 +14,26 @@ pub struct TournamentSelector {
 impl TournamentSelector {
     pub fn new(k: usize, mode: Optimize) -> Self {
         assert!(k >= 1, "Tournament size k must be >= 1");
-
         Self { k, mode }
     }
 
-    pub fn select<I: Score + Clone>(&self, population: &[I], rng: &mut impl Rng) -> Vec<I> {
-        assert!(!population.is_empty(), "Population must not be empty");
+    pub fn select<'a, I: Score>(&self, population: &'a [&'a I], rng: &mut impl Rng) -> Vec<&'a I> {
+        if population.is_empty() {
+            return vec![];
+        }
 
         let n = population.len();
-        let mut selected = Vec::with_capacity(n);
+        let mut indices: Vec<usize> = (0..n).collect();
 
-        for _ in 0..n {
-            // Initialize with a first random pick
-            let mut best_idx = rng.random_range(0..n);
+        indices.shuffle(rng);
+
+        let mut selected = Vec::with_capacity(n.div_ceil(self.k));
+
+        for chunk in indices.chunks(self.k) {
+            let mut best_idx = chunk[0];
             let mut best_score = population[best_idx].score();
 
-            // Sample remaining k-1 contestants
-            for _ in 1..self.k {
-                let idx = rng.random_range(0..n);
+            for &idx in &chunk[1..] {
                 let score = population[idx].score();
                 let better = match self.mode {
                     Optimize::Maximize => score > best_score,
@@ -43,13 +45,12 @@ impl TournamentSelector {
                 }
             }
 
-            selected.push(population[best_idx].clone());
+            selected.push(population[best_idx]);
         }
 
         selected
     }
 }
-
 pub trait Score {
     fn score(&self) -> f32;
 }

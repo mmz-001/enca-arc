@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::time::Instant;
 
 use clap::Parser;
@@ -7,13 +6,15 @@ use enca::config::Config;
 use enca::criteria::train_preserves_grid_size;
 use enca::dataset::{Submission, TestSubmissionOutput};
 use enca::env::inference;
+use enca::executors::Backend;
+use enca::executors::gpu::CUDA;
 use enca::serde_utils::JSONReadWrite;
 use enca::utils::mean;
 use enca::voting::vote;
 use enca::{dataset::Dataset, solver::train};
+use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use rayon::prelude::*;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -34,18 +35,23 @@ fn main() {
     let seed = args.seed;
     let dataset = Dataset::load(&tasks_path, None);
     let submission_path = "./submission.json";
-
-    println!("Loaded tasks from '{}': tasks={}", tasks_path, dataset.tasks.len());
-    let start = Instant::now();
-
-    let tasks = dataset.tasks;
-
     let config = if let Some(config_path) = args.config_path {
         Config::read_json(&config_path)
             .unwrap_or_else(|e| panic!("Failed to read config file '{}': {}", &config_path, e))
     } else {
         Config::default()
     };
+
+    // Initialize GPUs
+    if config.backend == Backend::GPU {
+        _ = &*CUDA;
+    }
+
+    println!("Loaded tasks from '{}': tasks={}", tasks_path, dataset.tasks.len());
+
+    let start = Instant::now();
+
+    let tasks = dataset.tasks;
 
     let pb = ProgressBar::new(tasks.len() as u64);
     pb.set_style(
@@ -57,52 +63,54 @@ fn main() {
     );
 
     let results: Vec<(String, Vec<TestSubmissionOutput>)> = tasks
-        .par_iter()
+        .iter()
         .map(|task| {
-            let output = if train_preserves_grid_size(task) {
-                let train_result = train(task, false, &config, seed);
+            pb.inc(1);
+            let default_output = (task.id.clone(), vec![TestSubmissionOutput::default(); task.test.len()]);
+            if !train_preserves_grid_size(task) {
+                return default_output;
+            }
 
-                let mut test_submission_outputs: Vec<TestSubmissionOutput> = Vec::with_capacity(task.test.len());
+            let train_result = train(task, false, &config, seed);
 
-                let solved_train = train_result
-                    .clone()
-                    .into_iter()
-                    .filter(|result| mean(&result.train_accs) == 1.0)
+            let mut test_submission_outputs: Vec<TestSubmissionOutput> = Vec::with_capacity(task.test.len());
+
+            let solved_train = train_result
+                .clone()
+                .into_iter()
+                .filter(|result| mean(&result.train_accs) == 1.0)
+                .collect_vec();
+
+            if solved_train.is_empty() {
+                return default_output;
+            }
+
+            let selected_train = if solved_train.is_empty() {
+                train_result
+            } else {
+                solved_train
+            };
+
+            for input in task.test_inputs() {
+                let aug_enca = selected_train
+                    .iter()
+                    .map(|result| augment(input, task, result.nca.clone(), seed, &config))
                     .collect_vec();
+                let top_k_aug_ncas = vote(input, &aug_enca, 2, false, config.backend.clone());
 
-                let selected_train_result = if !solved_train.is_empty() {
-                    solved_train
+                let pred_grid = inference(input, &top_k_aug_ncas[0], config.backend.clone());
+
+                let attempt_1 = pred_grid.data().clone();
+                let attempt_2 = if top_k_aug_ncas.len() >= 2 {
+                    let pred_grid = inference(input, &top_k_aug_ncas[1], config.backend.clone());
+                    pred_grid.data().clone()
                 } else {
-                    // Fallback
-                    train_result
+                    attempt_1.clone()
                 };
 
-                for input in task.test_inputs() {
-                    let aug_ensembles = selected_train_result
-                        .iter()
-                        .map(|result| augment(input, task, result.ensemble.clone(), seed))
-                        .collect_vec();
-                    let top_k_aug_ensembles = vote(input, &aug_ensembles, 2, false);
-
-                    let pred_grid = inference(input, &top_k_aug_ensembles[0]);
-
-                    let attempt_1 = pred_grid.data().clone();
-                    let attempt_2 = if top_k_aug_ensembles.len() >= 2 {
-                        let pred_grid = inference(input, &top_k_aug_ensembles[1]);
-                        pred_grid.data().clone()
-                    } else {
-                        attempt_1.clone()
-                    };
-
-                    test_submission_outputs.push(TestSubmissionOutput { attempt_1, attempt_2 });
-                }
-
-                test_submission_outputs
-            } else {
-                vec![TestSubmissionOutput::default(); task.test.len()]
-            };
-            pb.inc(1);
-            (task.id.clone(), output)
+                test_submission_outputs.push(TestSubmissionOutput { attempt_1, attempt_2 });
+            }
+            (task.id.clone(), test_submission_outputs)
         })
         .collect();
 
@@ -110,7 +118,7 @@ fn main() {
     let total_elapsed_ms = start.elapsed().as_millis();
     println!("elapsed_ms={}", total_elapsed_ms);
 
-    let submission: Submission = HashMap::from_iter(results);
+    let submission: Submission = IndexMap::from_iter(results);
 
     submission
         .write_json(submission_path)

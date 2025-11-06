@@ -1,10 +1,10 @@
 use clap::Parser;
 use enca::dataset::Submission;
 use enca::serde_utils::JSONReadWrite;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 type ARCGrid = Vec<Vec<u8>>;
-type GTSolutions = HashMap<String, Vec<ARCGrid>>;
+type GTSolutions = IndexMap<String, Vec<ARCGrid>>;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -12,7 +12,7 @@ struct Args {
     #[arg(short = 'p', long)]
     pred_path: String,
     /// Ground truth solutions JSON file
-    #[arg(short = 'g', long)]
+    #[arg(short = 'a', long)]
     gt_path: String,
 }
 

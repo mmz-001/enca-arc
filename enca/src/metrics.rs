@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use crate::nca::NCAEnsemble;
+use crate::nca::NCA;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaskReport {
     pub task_id: String,
     pub n_examples_train: usize,
     pub n_examples_test: usize,
-    pub n_ncas: usize,
     pub train_accs: Vec<f32>,
     pub test_accs: Vec<f32>,
     pub duration_ms: Option<usize>,
@@ -25,7 +24,7 @@ pub struct OverallSummary {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TrainOutput {
-    pub ensemble: NCAEnsemble,
+    pub nca: NCA,
     pub train_accs: Vec<f32>,
     pub fitness: f32,
 }

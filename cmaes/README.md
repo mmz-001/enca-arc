@@ -1,20 +1,15 @@
 # cmaes
 
 [![Crates.io](https://img.shields.io/crates/v/cmaes)](https://crates.io/crates/cmaes)
-[![Rust](https://github.com/pengowen123/cmaes/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/pengowen123/cmaes/actions/workflows/rust.yml)
 
-A Rust implementation of the CMA-ES optimization algorithm. It is used to minimize or maximize the value of an objective function and performs well on high-dimension, non-linear, non-convex, ill-conditioned, and/or noisy problems. See [this paper][5] for details on the algorithm itself.
+A Rust implementation of the CMA-ES optimization algorithm. It is used to minimize or maximize the value of an objective function and performs well on high-dimensional, non-linear, non-convex, ill-conditioned, and/or noisy problems. See [this paper][5] for details on the algorithm itself.
 
 ## Dependencies
 
 `cmaes` uses some external libraries, so the following dependencies are required:
 
 - Rust (tested with rustc 1.57, earlier versions may work)
-- Depending on the selected LAPACK implementation (which can be enabled by feature, but by default is not), you need the libraries for that particular choice, which is *at least*
-  - Make
-  - CMake
-  - A C compiler
-  - A Fortran compiler (GCC's gfortran works)
+
 
 ## Quick Start
 
@@ -25,7 +20,6 @@ Add this to your Cargo.toml:
 cmaes = "0.2"
 ```
 
-The LAPACK implementation used may be selected through Cargo features (see `Cargo.toml`). By default, pure Rust implementation from nalgebra is used.
 
 Then, to optimize a function:
 ```rust
@@ -54,26 +48,6 @@ let results = cmaes_state.run();
 
 ```
 
-
-
-For more complex problems, automatic restarts are also provided:
-```rust
-use cmaes::restart::{RestartOptions, RestartStrategy};
-use cmaes::DVector;
-
-let sphere = |x: &DVector<f64>| x.iter().map(|xi| xi.powi(2)).sum();
-
-let strategy = RestartStrategy::BIPOP(Default::default());
-let dim = 10;
-let search_range = -5.0..=5.0;
-let restarter = RestartOptions::new(dim, search_range, strategy)
-    .fun_target(1e-10)
-    .enable_printing(true)
-    .build()
-    .unwrap();
-
-let results = restarter.run(|| sphere);
-```
 
 For more information, see the [documentation][0] and [examples][1].
 

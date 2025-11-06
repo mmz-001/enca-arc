@@ -16,14 +16,16 @@ ndarray-rand = "0.15.0"
 ndarray-stats = "0.6.0"
 cmaes = { path = "../cmaes" }
 clap = { version = "4.5.46", features = ["derive"] }
-nalgebra = "0.34.0"
+nalgebra = "0.33"
 criterion = { version = "0.7.0", features = ["html_reports"] }
 mimalloc = "0.1.48"
 chrono = { version = "0.4.42", features = ["clock"] }
-indexmap = "2.11.1"
+indexmap = { version = "2.11.1", features = ["serde"] }
 indicatif = { version = "0.18.0", features = ["rayon"] }
 rand_chacha = "0.9.0"
-
+statrs = "0.18"
+cudarc = { version = "0.17.3", features = ["cuda-version-from-build-system"] }
+# cudarc = { version = "0.17.3", features = ["cuda-12060"] }
 
 
 [[bench]]

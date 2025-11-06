@@ -1,33 +1,43 @@
 use serde::{Deserialize, Serialize};
 
-// Hyperparameters for the ENCA algorithm
+use crate::executors::Backend;
+
+/// Hyperparameters for the ENCA algorithm
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Config {
-    pub max_ncas: usize,
+    /// Number of epochs for the evolutionary loop
+    pub epochs: usize,
+    /// Maximum number of NCA steps
     pub max_steps: usize,
+    /// Population size for evolutionary loop
     pub pop: usize,
+    /// Tournament selection size
     pub k: usize,
-    pub cmaes_max_fun_evals: usize,
-    pub cmaes_initial_sigma: f32,
-    pub oscillation_cost_coeff: f32,
-    pub non_convergence_cost_coeff: f32,
-    pub l1_coeff: f32,
-    pub l2_coeff: f32,
+    /// Only a subset of the parameters is used to for CMA-ES
+    /// optimization
+    pub subset_size: usize,
+    /// Maximum number of function evaluations per CMA-ES run
+    pub max_fun_evals: usize,
+    /// CMA-ES initial sigma
+    pub initial_sigma: f64,
+    /// L2 weight decay coefficient
+    pub l2_coeff: f64,
+    /// Inference backend; GPU or CPU
+    pub backend: Backend,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            max_ncas: 5,
+            epochs: 20,
             max_steps: 40,
-            pop: 100,
-            k: 5,
-            cmaes_max_fun_evals: 20_000,
-            cmaes_initial_sigma: 0.2,
-            oscillation_cost_coeff: 1e-5,
-            non_convergence_cost_coeff: 1e-5,
-            l1_coeff: 1e-4,
+            pop: 12,
+            k: 2,
+            subset_size: 120,
+            max_fun_evals: 5000,
+            initial_sigma: 0.2,
             l2_coeff: 1e-4,
+            backend: Backend::GPU,
         }
     }
 }

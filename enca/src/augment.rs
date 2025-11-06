@@ -7,11 +7,12 @@ use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    config::Config,
     constants::MAX_PERMUTATIONS,
     dataset::Task,
-    executors::NCAEnsembleExecutor,
+    executors::NCAExecutor,
     grid::Grid,
-    nca::NCAEnsemble,
+    nca::NCA,
     transforms::{RemapColors, Transform},
     utils::union_sets,
 };
@@ -21,14 +22,14 @@ fn colors_sorted_nonzero(set: &HashSet<u8>) -> Vec<u8> {
     set.iter().copied().filter(|&c| c != 0).sorted().collect()
 }
 
-pub fn augment(grid: &Grid, task: &Task, ensemble: NCAEnsemble, seed: u64) -> NCAEnsemble {
+pub fn augment(grid: &Grid, task: &Task, nca: NCA, seed: u64, config: &Config) -> NCA {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let ti_col_set = union_sets(task.train_inputs().iter().map(|grid| grid.colors().clone()));
     let grid_col_set = grid.colors();
 
     if grid_col_set.difference(&ti_col_set).next().is_none() {
         // No unseen colors. Return original
-        return ensemble;
+        return nca;
     }
 
     let ti_cols = colors_sorted_nonzero(&ti_col_set);
@@ -36,7 +37,7 @@ pub fn augment(grid: &Grid, task: &Task, ensemble: NCAEnsemble, seed: u64) -> NC
 
     if grid_cols.len() > ti_cols.len() {
         // Grid has more colors than all input colors. Can't remap; return original
-        return ensemble;
+        return nca;
     }
 
     let n = ti_cols.len();
@@ -45,7 +46,7 @@ pub fn augment(grid: &Grid, task: &Task, ensemble: NCAEnsemble, seed: u64) -> NC
     let mut pred_grid_counts = IndexMap::<u64, (usize, RemapColors)>::new();
     let empty_grid_hash = Grid::from_vec(vec![vec![0; grid.width()]; grid.height()]).get_hash();
 
-    for rank in floyd_unique_indices(total, MAX_PERMUTATIONS, &mut rng) {
+    for rank in floyd_unique_indices(total, MAX_PERMUTATIONS.min(config.max_fun_evals), &mut rng) {
         // Sample up to MAX_PERMUTATIONS unique color remappings and get majority vote
         let perm = unrank_k_perm(rank, &ti_cols, k);
         let mut color_transform = RemapColors::new();
@@ -54,20 +55,18 @@ pub fn augment(grid: &Grid, task: &Task, ensemble: NCAEnsemble, seed: u64) -> NC
             color_transform.map(*grid_col, *map_col);
         }
 
-        let mut aug_ensemble = ensemble.clone();
-        aug_ensemble
+        let mut aug_nca = nca.clone();
+        aug_nca
             .transform_pipeline
             .steps
             .insert(0, Transform::RemapColors(color_transform.clone()));
 
-        let mut executor = NCAEnsembleExecutor::new(aug_ensemble.clone(), grid);
+        let mut executor = NCAExecutor::new(aug_nca.clone(), grid, config.backend.clone());
 
         executor.run();
 
-        let substrate = &executor.executors.last().unwrap().substrate;
-        let mut pred_grid = substrate.to_grid();
-
-        aug_ensemble.transform_pipeline.revert(&mut pred_grid);
+        let mut pred_grid = executor.substrate().to_grid();
+        aug_nca.transform_pipeline.revert(&mut pred_grid);
 
         // Don't count empty grids:
         if pred_grid.get_hash() == empty_grid_hash {
@@ -81,7 +80,7 @@ pub fn augment(grid: &Grid, task: &Task, ensemble: NCAEnsemble, seed: u64) -> NC
     }
 
     if pred_grid_counts.is_empty() {
-        return ensemble;
+        return nca;
     }
 
     let pred_grid_counts_sorted = pred_grid_counts
@@ -93,20 +92,20 @@ pub fn augment(grid: &Grid, task: &Task, ensemble: NCAEnsemble, seed: u64) -> NC
 
     let maj_transform = pred_grid_counts_sorted[0].1.1.clone();
 
-    let mut aug_ensemble = ensemble.clone();
-    aug_ensemble
+    let mut aug_nca = nca.clone();
+    aug_nca
         .transform_pipeline
         .steps
         .insert(0, Transform::RemapColors(maj_transform));
 
-    aug_ensemble
+    aug_nca
 }
 
 /// The trained NCA and augmented NCAs for each test problem.
 #[derive(Serialize, Deserialize, Clone)]
-pub struct TaskECAEnsembles {
-    pub train: NCAEnsemble,
-    pub test: Vec<NCAEnsemble>,
+pub struct TaskNCAs {
+    pub train: NCA,
+    pub test: Vec<NCA>,
 }
 
 /// Compute nPk = n * (n-1) * ... * (n-k+1) as u128

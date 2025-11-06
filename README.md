@@ -1,6 +1,6 @@
-# Evolved Neural Cellular Automata (ENCA) for ARC-AGI 
+# Evolved Neural Cellular Automata (ENCA) for ARC-AGI
 
-Evolved Neural Cellular Automata (ENCA) solves ARC-AGI problems using an ensemble of sequentially executed NCAs evolved using CMA-ES.
+Evolved Neural Cellular Automata (ENCA) solves ARC-AGI tasks with NCAs evolved using CMA-ES.
 
 Blog: [enca-arc.mmzdev.com](https://enca-arc.mmzdev.com)
 
@@ -12,25 +12,31 @@ Linux setup
 
 ```shell
 sudo apt update && sudo apt install git build-essential -y
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -y | sh && . "$HOME/.cargo/env"
-git clone https://github.com/mmz-001/enca-arc
-cd enca-arc
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && . "$HOME/.cargo/env"
+git clone https://github.com/mmz-001/enca
+cd enca/enca
 ```
 
-Download [ARC-AGI-1](https://www.kaggle.com/competitions/arc-prize-2024/data) and [ARC-AGI-2](https://www.kaggle.com/competitions/arc-prize-2025/data) datasets from Kaggle and put them under `./enca/data/v1` and `./enca/data/v2` respectively. Note the Kaggle format is different from the ARC-AGI-1 and ARC-AGI-2 repos.
+Run all commands below in `/enca` package.
+
+Unzip `enca/data.zip` containing ARC-AGI-1 and ARC-AGI-2 tasks:
+
+```shell
+unzip data.zip
+```
 
 ## Training
 
-Use the train binary to evolve NCA ensembles.
-
+Use the train binary to evolve NCAs.
 
 Typical usage:
 ```shell
-cargo run --release --bin train -- -t ./data/v1/arc-agi_training_challenges.json -a ./data/v1/arc-agi_training_solutions.json -s 1
+cargo run --release --bin train -- -t ./data/v1/arc-agi_training_challenges.json -a ./data/v1/arc-agi_training_solutions.json -r runs/v1-train -s 1 -c config.json
 ```
 
-
-This saves the models, metrics, and summary in  `./runs/<timestamp>`
+```
+cargo run --release --bin train -- -t ./data/v2/arc-agi_evaluation_challenges.json -a ./data/v2/arc-agi_evaluation_solutions.json -r runs/v2-eval -s 1 -c config.json
+```
 
 Flags:
 ```
@@ -40,6 +46,7 @@ Flags:
 -r, --out-dir DIR            Output directory for this run (default: runs/<timestamp>)
 -i, --id TASK_ID             Optional single task id to train/evaluate
 -s, --seed SEED              Optional seed for reproducibility.
+-c, --config PATH            Optional path to config.json
 ```
 
 ## Visualization
@@ -52,7 +59,11 @@ After training, use the viz binary to interactively visualize execution.
 
 Basic usage:
 ```shell
-cargo run --release --bin viz -- -t ./data/v1/arc-agi_training_challenges.json -a ./data/v1/arc-agi_training_solutions.json -r <run_dir>
+cargo run --release --bin viz -- -t ./data/v1/arc-agi_training_challenges.json -a ./data/v1/arc-agi_training_solutions.json -r runs/v1-train
+```
+
+```shell
+cargo run --release --bin viz -- -t ./data/v2/arc-agi_evaluation_challenges.json -a ./data/v2/arc-agi_evaluation_solutions.json -r runs/v2-eval
 ```
 
 Flags:
@@ -69,8 +80,11 @@ Controls:
 - Space: Pause/Resume simulation
 - E: Toggle Train/Test split
 - R: Reset current example
-- D: Next example (Shift+D: Next task)
-- A: Previous example (Shift+A: Previous task)
+- D: Next example
+- A: Previous example
+- Shift+D / Mouse wheel up: Next task
+- Shift+A / Mouse wheel down: Previous task
+- Ctrl+C: Print task ID to console
 ```
 
 ## Running benchmarks
@@ -86,18 +100,28 @@ Compare against a saved baseline by
 cargo bench --bench bench_nca -- --baseline nca
 ```
 
+## Validation
 
-## Static linking
+The submission binary runs training and produces a `submission.json` file with:
+
+```shell
+cargo run --release --bin submission -- -p submission.json -a ./data/v1/arc-agi_training_solutions.json
+```
+
+Validate the submission using ground-truth solutions with:
 
 
 ```shell
-sudo apt-get install musl-tools musl-dev -y
-rustup target add x86_64-unknown-linux-musl
-cargo build --release --target x86_64-unknown-linux-musl
+cargo run --release --bin check -- -p submission.json -a ./data/v1/arc-agi_training_solutions.json
 ```
 
-Binaries under `target/x86_64-unknown-linux-musl/release`
-If you're running the executable in a different machine ensure the target CPUs match since we set `target-cpu=native` in `RUSTFLAGS`. **Compiling for a generic CPU can cause severe performance degradation.**
+## Testing backends
+
+The `gpu_check` binary runs random NCAs on both CPU and GPU backends and checks if the results are the same:
+
+```shell
+cargo run --release --bin gpu_check
+```
 
 ## License
 

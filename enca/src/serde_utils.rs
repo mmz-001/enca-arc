@@ -36,7 +36,7 @@ where
     {
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(&mut writer, self)?;
+        serde_json::to_writer(&mut writer, self)?;
         writer.flush()?;
         Ok(())
     }
@@ -63,6 +63,8 @@ where
             let item: Self = serde_json::from_reader(&mut rdr).unwrap();
             items.push((file_name, item));
         }
+
+        items.sort_by_key(|item| item.0.clone());
 
         Ok(items)
     }
