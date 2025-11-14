@@ -177,7 +177,7 @@ type T = Vec<(Arc<CudaContext>, Arc<CudaFunction>, Arc<CudaStream>)>;
 
 pub static CUDA: LazyLock<T> = LazyLock::new(|| {
     let ptx = cudarc::nvrtc::compile_ptx_with_opts(
-        include_str!("./kernels.cu"),
+        include_str!("./kernel.cu"),
         cudarc::nvrtc::CompileOptions {
             fmad: Some(true),
             ..Default::default()
