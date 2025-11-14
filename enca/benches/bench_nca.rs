@@ -11,9 +11,9 @@ use rand_chacha::ChaCha8Rng;
 fn single_grid(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::seed_from_u64(1);
     let tasks_path = "./data/v1/arc-agi_training_challenges.json";
-    let train_dataset = Dataset::load(&tasks_path, None);
+    let dataset = Dataset::load(&tasks_path, None);
 
-    let task = &train_dataset.get_task("264363fd").unwrap(); // 30x30 grid
+    let task = &dataset.get_task("264363fd").unwrap(); // 30x30 grid
 
     let mut nca = NCA::new(100);
     nca.initialize_random(&mut rng);
@@ -40,13 +40,13 @@ fn single_grid(c: &mut Criterion) {
 fn multi_grid(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::seed_from_u64(1);
     let tasks_path = "./data/v2/arc-agi_evaluation_challenges.json";
-    let train_dataset = Dataset::load(&tasks_path, None);
-    let n_grids = 10;
+    let dataset = Dataset::load(&tasks_path, None);
+    let n_ncas = 10;
 
-    let tasks = &train_dataset.tasks[0..n_grids];
-    let grids = tasks.iter().map(|task| &task.train[0].input).collect_vec();
+    let task = &dataset.get_task("36a08778").unwrap();
+    let grids = task.test_inputs();
 
-    let ncas = (0..n_grids)
+    let ncas = (0..n_ncas)
         .map(|_| {
             let mut nca = NCA::new(100);
             nca.initialize_random(&mut rng);
@@ -65,11 +65,11 @@ fn multi_grid(c: &mut Criterion) {
 
     group.bench_function("cpu", |b| {
         b.iter(|| {
-            for i in 0..n_grids {
-                let nca = ncas[i].clone();
-                let grid = &grids[i];
-                let mut executor = NCAExecutor::new(nca, grid, Backend::CPU);
-                executor.run();
+            for nca in &ncas {
+                for grid in &grids {
+                    let mut executor = NCAExecutor::new(nca.clone(), grid, Backend::CPU);
+                    executor.run();
+                }
             }
         })
     });
