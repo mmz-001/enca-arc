@@ -89,7 +89,7 @@ Controls:
 
 ## Running benchmarks
 
-Put the model file `264363fd.json` in `enca/benches/models` and run inference benchmarks with:
+Run inference benchmarks with:
 
 ```shell
 cargo bench --bench bench_nca -- --save-baseline nca
