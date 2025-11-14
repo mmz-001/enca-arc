@@ -1,4 +1,21 @@
-#include "constants.h"
+static constexpr int NHBD_LEN = 5;
+static constexpr int VIS_CHS = 4;
+static constexpr int HID_CHS = 2;
+static constexpr int INP_CHS = VIS_CHS * 2 + HID_CHS;
+static constexpr int OUT_CHS = VIS_CHS + HID_CHS;
+
+static constexpr int INP_DIM = NHBD_LEN * INP_CHS;
+
+static constexpr int N_WEIGHTS = OUT_CHS * INP_DIM;
+static constexpr int N_BIASES = OUT_CHS;
+
+static constexpr int N_PARAMS = N_WEIGHTS + N_BIASES;
+
+__device__ __constant__ static constexpr int NHBD[NHBD_LEN][2] = {
+             { 0,-1},
+    {-1, 0}, { 0, 0}, {1, 0},
+             { 0, 1}
+};
 
 extern "C" __device__ void nca_update(float *__restrict__ sub, const int height, const int width,
                                       const float *__restrict__ weights, const float *__restrict__ biases) {

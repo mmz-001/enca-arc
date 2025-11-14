@@ -2,8 +2,6 @@ use crate::constants::N_PARAMS;
 use crate::{constants::INP_CHS, grid::Grid, nca::NCA, substrate::Substrate};
 use cudarc::driver::{CudaContext, CudaFunction, CudaStream, LaunchConfig, PushKernelArg};
 use itertools::Itertools;
-
-use std::env;
 use std::sync::{Arc, LazyLock};
 
 #[derive(Clone)]
@@ -182,7 +180,6 @@ pub static CUDA: LazyLock<T> = LazyLock::new(|| {
         include_str!("./kernels.cu"),
         cudarc::nvrtc::CompileOptions {
             fmad: Some(true),
-            include_paths: vec![concat!(env!("CARGO_MANIFEST_DIR"), "/src/executors/gpu").to_string()],
             ..Default::default()
         },
     )
