@@ -1,13 +1,14 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use enca::{
     dataset::Dataset,
-    executors::{Backend, NCAExecutor},
+    executors::{Backend, NCAExecutor, gpu::PopNCAExecutorGpuBatch},
     nca::NCA,
 };
+use itertools::Itertools;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-fn nca_run(c: &mut Criterion) {
+fn single_grid(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::seed_from_u64(1);
     let tasks_path = "./data/v1/arc-agi_training_challenges.json";
     let train_dataset = Dataset::load(&tasks_path, None);
@@ -17,17 +18,18 @@ fn nca_run(c: &mut Criterion) {
     let mut nca = NCA::new(100);
     nca.initialize_random(&mut rng);
 
-    let mut group = c.benchmark_group("nca_run");
+    let mut group = c.benchmark_group("nca_single_grid");
 
-    let backend = Backend::GPU;
-
-    let mut executor = NCAExecutor::new(nca.clone(), &task.train[0].input, backend.clone());
-    executor.run();
-
-    println!("output_grid_hash = {}", executor.substrate().to_grid().get_hash());
-    group.bench_function("nca_run", |b| {
+    group.bench_function("gpu", |b| {
         b.iter(|| {
-            let mut executor = NCAExecutor::new(nca.clone(), &task.train[0].input, backend.clone());
+            let mut executor = NCAExecutor::new(nca.clone(), &task.train[0].input, Backend::GPU);
+            executor.run();
+        })
+    });
+
+    group.bench_function("cpu", |b| {
+        b.iter(|| {
+            let mut executor = NCAExecutor::new(nca.clone(), &task.train[0].input, Backend::CPU);
             executor.run();
         })
     });
@@ -35,5 +37,45 @@ fn nca_run(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, nca_run);
+fn multi_grid(c: &mut Criterion) {
+    let mut rng = ChaCha8Rng::seed_from_u64(1);
+    let tasks_path = "./data/v2/arc-agi_evaluation_challenges.json";
+    let train_dataset = Dataset::load(&tasks_path, None);
+    let n_grids = 10;
+
+    let tasks = &train_dataset.tasks[0..n_grids];
+    let grids = tasks.iter().map(|task| &task.train[0].input).collect_vec();
+
+    let ncas = (0..n_grids)
+        .map(|_| {
+            let mut nca = NCA::new(100);
+            nca.initialize_random(&mut rng);
+            nca
+        })
+        .collect_vec();
+
+    let mut group = c.benchmark_group("nca_multi_grid");
+
+    group.bench_function("gpu", |b| {
+        b.iter(|| {
+            let mut executor = PopNCAExecutorGpuBatch::new(ncas.clone(), &grids);
+            executor.run();
+        })
+    });
+
+    group.bench_function("cpu", |b| {
+        b.iter(|| {
+            for i in 0..n_grids {
+                let nca = ncas[i].clone();
+                let grid = &grids[i];
+                let mut executor = NCAExecutor::new(nca, grid, Backend::CPU);
+                executor.run();
+            }
+        })
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, single_grid, multi_grid);
 criterion_main!(benches);
