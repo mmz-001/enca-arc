@@ -73,7 +73,8 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
     }
 
     extern __shared__ float s_sub[];
-    __shared__ float s_params[N_PARAMS];
+    __shared__ float s_weights[N_WEIGHTS];
+    __shared__ float s_biases[N_BIASES];
 
     int base = threadIdx.x * INP_CHS;
     int n_grids = gridDim.x;
@@ -87,14 +88,18 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
         s_sub[base + ch] = pop_subs[subs_base + ch];
     }
 
-    for (int i = threadIdx.x; i < N_PARAMS; i += size) {
-        s_params[i] = pop_params[ind_idx * N_PARAMS + i];
+    for (int i = threadIdx.x; i < N_WEIGHTS; i += size) {
+        s_weights[i] = pop_params[ind_idx * N_PARAMS + i];
+    }
+
+    for (int i = threadIdx.x; i < N_BIASES; i += size) {
+        s_biases[i] = pop_params[ind_idx * N_PARAMS + N_WEIGHTS + i];
     }
 
     __syncthreads();
 
     for (int i = 0; i < max_steps; i++) {
-        nca_update(s_sub, height, width, s_params, &s_params[N_WEIGHTS]);
+        nca_update(s_sub, height, width, s_weights, s_biases);
         __syncthreads();
     }
 
