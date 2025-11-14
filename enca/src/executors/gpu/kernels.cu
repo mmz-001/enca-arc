@@ -3,14 +3,10 @@ static constexpr int VIS_CHS = 4;
 static constexpr int HID_CHS = 2;
 static constexpr int INP_CHS = VIS_CHS * 2 + HID_CHS;
 static constexpr int OUT_CHS = VIS_CHS + HID_CHS;
-
 static constexpr int INP_DIM = NHBD_LEN * INP_CHS;
-
 static constexpr int N_WEIGHTS = OUT_CHS * INP_DIM;
 static constexpr int N_BIASES = OUT_CHS;
-
 static constexpr int N_PARAMS = N_WEIGHTS + N_BIASES;
-
 __device__ __constant__ static constexpr int NHBD[NHBD_LEN][2] = {
              { 0,-1},
     {-1, 0}, { 0, 0}, {1, 0},
@@ -63,17 +59,6 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
     }
 }
 
-extern "C" __device__ void nca_executor_run(float *__restrict__ sub, const float *__restrict__ params,
-                                            const int height, const int width, const int max_steps) {
-
-    const float *s_weights = params;
-    const float *s_biases = &params[N_WEIGHTS];
-
-    for (int i = 0; i < max_steps; i++) {
-        nca_update(sub, height, width, s_weights, s_biases);
-        __syncthreads();
-    }
-}
 
 extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_subs,
                                                       const float *__restrict__ pop_params,
@@ -108,7 +93,10 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
 
     __syncthreads();
 
-    nca_executor_run(s_sub, s_params, height, width, max_steps);
+    for (int i = 0; i < max_steps; i++) {
+        nca_update(s_sub, height, width, s_params, &s_params[N_WEIGHTS]);
+        __syncthreads();
+    }
 
     for (int ch = 0; ch < INP_CHS; ch++) {
         pop_subs[subs_base + ch] = s_sub[base + ch];
