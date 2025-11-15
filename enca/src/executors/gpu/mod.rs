@@ -1,4 +1,4 @@
-use crate::constants::N_PARAMS;
+use crate::constants::{N_PARAMS, N_WEIGHTS};
 use crate::{constants::INP_CHS, grid::Grid, nca::NCA, substrate::Substrate};
 use cudarc::driver::{CudaContext, CudaFunction, CudaStream, LaunchConfig, PushKernelArg};
 use itertools::Itertools;
@@ -111,6 +111,7 @@ impl PopNCAExecutorGpuBatch {
         let ind_subs_total_len = sub_max_len * substrates_0.len();
         let pop_sub_total_len = ind_subs_total_len * pop_size;
         let mut pop_substrates = vec![0.0; pop_sub_total_len];
+        let mut pop_nca_params = vec![0.0; pop_size * N_PARAMS];
 
         for (ind_idx, ind) in self.individuals.iter().enumerate() {
             for (i, s) in ind.substrates.iter().enumerate() {
@@ -118,16 +119,15 @@ impl PopNCAExecutorGpuBatch {
                 let dst = &mut pop_substrates[start..start + s.data.len()];
                 dst.copy_from_slice(s.data.as_slice().unwrap());
             }
-        }
 
-        let mut pop_nca_params = vec![0.0; pop_size * N_PARAMS];
-
-        for (ind_idx, ind) in self.individuals.iter().enumerate() {
             let nca = &ind.nca;
-            let nca_params = [nca.weights.clone(), nca.biases.clone()].concat();
             let start = ind_idx * N_PARAMS;
-            let dst = &mut pop_nca_params[start..start + N_PARAMS];
-            dst.copy_from_slice(&nca_params);
+
+            let dst_weights = &mut pop_nca_params[start..start + N_WEIGHTS];
+            dst_weights.copy_from_slice(&nca.weights);
+
+            let dst_biases = &mut pop_nca_params[(start + N_WEIGHTS)..(start + N_PARAMS)];
+            dst_biases.copy_from_slice(&nca.biases);
         }
 
         let ctxs = &*CUDA;
