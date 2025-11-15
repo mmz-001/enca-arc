@@ -75,26 +75,20 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
     __shared__ float s_weights_t[INP_DIM][OUT_CHS];
     __shared__ float s_biases[N_BIASES];
 
-    int base = threadIdx.x * INP_CHS;
-    int n_grids = gridDim.x;
-    int ind_idx = blockIdx.y;
-    int grid_idx = blockIdx.x;
+    int grid_elem_base = (blockIdx.y * gridDim.x + blockIdx.x) * max_grid_size * INP_CHS;
 
-    int grid_elem_base = (ind_idx * n_grids + grid_idx) * max_grid_size;
-    int subs_base = (grid_elem_base + threadIdx.x) * INP_CHS;
-
-    for (int ch = 0; ch < INP_CHS; ch++) {
-        s_sub[base + ch] = pop_subs[subs_base + ch];
+    for (int i = 0; i < INP_CHS * size; i += size) {
+        s_sub[threadIdx.x + i] = pop_subs[grid_elem_base + threadIdx.x + i];
     }
 
     for (int i = threadIdx.x; i < N_WEIGHTS; i += size) {
         int col = i % INP_DIM;
         int row = i / INP_DIM;
-        s_weights_t[col][row] = pop_params[ind_idx * N_PARAMS + i];
+        s_weights_t[col][row] = pop_params[blockIdx.y * N_PARAMS + i];
     }
 
     for (int i = threadIdx.x; i < N_BIASES; i += size) {
-        s_biases[i] = pop_params[ind_idx * N_PARAMS + N_WEIGHTS + i];
+        s_biases[i] = pop_params[blockIdx.y * N_PARAMS + N_WEIGHTS + i];
     }
 
     __syncthreads();
@@ -104,7 +98,7 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
         __syncthreads();
     }
 
-    for (int ch = 0; ch < INP_CHS; ch++) {
-        pop_subs[subs_base + ch] = s_sub[base + ch];
+    for (int i = 0; i < INP_CHS * size; i += size) {
+        pop_subs[grid_elem_base + threadIdx.x + i] = s_sub[threadIdx.x + i];
     }
 }
