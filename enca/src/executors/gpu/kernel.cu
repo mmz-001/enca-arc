@@ -14,7 +14,7 @@ __device__ __constant__ static constexpr int NHBD[NHBD_LEN][2] = {
 };
 
 extern "C" __device__ void nca_update(float *__restrict__ sub, const int height, const int width,
-                                      const float *__restrict__ weights, const float *__restrict__ biases) {
+                                      const float *__restrict__ weights_t, const float *__restrict__ biases) {
     const int x = threadIdx.x % width;
     const int y = threadIdx.x / width;
     int base = threadIdx.x * INP_CHS;
@@ -46,7 +46,7 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
 
             for (int outCh = 0; outCh < OUT_CHS; outCh++) {
                 const int wi = colIdx * OUT_CHS + outCh;
-                outBuf[outCh] += (neighVal * mask) * weights[wi];
+                outBuf[outCh] += (neighVal * mask) * weights_t[wi];
             }
         }
     }
