@@ -14,7 +14,7 @@ __device__ __constant__ static constexpr int NHBD[NHBD_LEN][2] = {
 };
 
 extern "C" __device__ void nca_update(float *__restrict__ sub, const int height, const int width,
-                                      const float *__restrict__ weights_t, const float *__restrict__ biases) {
+                                      const float weights_t[INP_DIM][OUT_CHS], const float *__restrict__ biases) {
     const int x = threadIdx.x % width;
     const int y = threadIdx.x / width;
     int base = threadIdx.x * INP_CHS;
@@ -45,8 +45,7 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
             const int colIdx = inCh * NHBD_LEN + ni;
 
             for (int outCh = 0; outCh < OUT_CHS; outCh++) {
-                const int wi = colIdx * OUT_CHS + outCh;
-                outBuf[outCh] += (neighVal * mask) * weights_t[wi];
+                outBuf[outCh] += (neighVal * mask) * weights_t[colIdx][outCh];
             }
         }
     }
@@ -73,7 +72,7 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
     }
 
     extern __shared__ float s_sub[];
-    __shared__ float s_weights_t[N_WEIGHTS];
+    __shared__ float s_weights_t[INP_DIM][OUT_CHS];
     __shared__ float s_biases[N_BIASES];
 
     int base = threadIdx.x * INP_CHS;
@@ -91,8 +90,7 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
     for (int i = threadIdx.x; i < N_WEIGHTS; i += size) {
         int col = i % INP_DIM;
         int row = i / INP_DIM;
-        int i_t = OUT_CHS * col + row;
-        s_weights_t[i_t] = pop_params[ind_idx * N_PARAMS + i];
+        s_weights_t[col][row] = pop_params[ind_idx * N_PARAMS + i];
     }
 
     for (int i = threadIdx.x; i < N_BIASES; i += size) {
