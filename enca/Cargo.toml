@@ -24,8 +24,8 @@ indexmap = { version = "2.11.1", features = ["serde"] }
 indicatif = { version = "0.18.0", features = ["rayon"] }
 rand_chacha = "0.9.0"
 statrs = "0.18"
-cudarc = { version = "0.17.3", features = ["cuda-version-from-build-system"] }
-# cudarc = { version = "0.17.3", features = ["cuda-12060"] }
+cudarc = { version = "0.18.0", features = ["cuda-version-from-build-system"] }
+
 
 
 [[bench]]

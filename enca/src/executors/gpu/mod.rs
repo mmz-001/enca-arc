@@ -134,10 +134,10 @@ impl PopNCAExecutorGpuBatch {
         // TODO: figure out a better way to distribute work
         let (_, kernel, stream) = &ctxs[rayon::current_thread_index().unwrap_or(0) % ctxs.len()];
 
-        let mut d_pop_subs = stream.memcpy_stod(&pop_substrates).unwrap();
-        let d_pop_nca_params = stream.memcpy_stod(&pop_nca_params).unwrap();
-        let d_heights = stream.memcpy_stod(&heights).unwrap();
-        let d_widths = stream.memcpy_stod(&widths).unwrap();
+        let mut d_pop_subs = stream.clone_htod(&pop_substrates).unwrap();
+        let d_pop_nca_params = stream.clone_htod(&pop_nca_params).unwrap();
+        let d_heights = stream.clone_htod(&heights).unwrap();
+        let d_widths = stream.clone_htod(&widths).unwrap();
         let max_steps = self.individuals[0].nca.max_steps as i32;
         let n_grids = substrates_0.len() as i32;
         let mut builder = stream.launch_builder(kernel);
@@ -157,7 +157,7 @@ impl PopNCAExecutorGpuBatch {
 
         unsafe { builder.launch(lc) }.unwrap();
 
-        let pop_substrates = stream.memcpy_dtov(&d_pop_subs).unwrap();
+        let pop_substrates = stream.clone_dtoh(&d_pop_subs).unwrap();
 
         for (ind_idx, ind) in self.individuals.iter_mut().enumerate() {
             for i in 0..ind.substrates.len() {
