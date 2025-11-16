@@ -1,6 +1,6 @@
 use crate::constants::{N_PARAMS, N_WEIGHTS};
 use crate::{constants::INP_CHS, grid::Grid, nca::NCA, substrate::Substrate};
-use cudarc::driver::{CudaContext, CudaFunction, CudaStream, LaunchConfig, PushKernelArg};
+use cudarc::driver::{CudaContext, CudaFunction, LaunchConfig, PushKernelArg};
 use itertools::Itertools;
 use std::sync::{Arc, LazyLock};
 
@@ -132,7 +132,8 @@ impl PopNCAExecutorGpuBatch {
 
         let ctxs = &*CUDA;
         // TODO: figure out a better way to distribute work
-        let (_, kernel, stream) = &ctxs[rayon::current_thread_index().unwrap_or(0) % ctxs.len()];
+        let (ctx, kernel) = &ctxs[rayon::current_thread_index().unwrap_or(0) % ctxs.len()];
+        let stream = ctx.per_thread_stream();
 
         let mut d_pop_subs = stream.clone_htod(&pop_substrates).unwrap();
         let d_pop_nca_params = stream.clone_htod(&pop_nca_params).unwrap();
@@ -173,7 +174,7 @@ impl PopNCAExecutorGpuBatch {
     }
 }
 
-type T = Vec<(Arc<CudaContext>, Arc<CudaFunction>, Arc<CudaStream>)>;
+type T = Vec<(Arc<CudaContext>, Arc<CudaFunction>)>;
 
 pub static CUDA: LazyLock<T> = LazyLock::new(|| {
     let ptx = cudarc::nvrtc::compile_ptx_with_opts(
@@ -186,22 +187,17 @@ pub static CUDA: LazyLock<T> = LazyLock::new(|| {
     .unwrap();
 
     let device_count = cudarc::runtime::result::device::get_count().unwrap() as usize;
-    // let device_count = 1;
-    let n_threads = rayon::current_num_threads();
-    println!("======Initializing GPU(s)=========");
+    println!("\n======Initializing GPU(s)=========");
     println!("GPU count={}", device_count);
-    println!("Rayon thread count={}", n_threads);
 
-    let threads_per_device = n_threads.div_ceil(device_count);
-    // let threads_per_device = 1;
-    let mut ctxs = Vec::with_capacity(threads_per_device * device_count);
+    let mut ctxs = Vec::with_capacity(device_count);
 
     for dev_ord in 0..device_count {
         let ctx = cudarc::driver::CudaContext::new(dev_ord).unwrap();
         let module = ctx.load_module(ptx.clone()).unwrap();
         let kernel = Arc::new(module.load_function("pop_nca_executor_run_batch").unwrap());
 
-        ctxs.extend((0..threads_per_device).map(|_| (ctx.clone(), kernel.clone(), ctx.new_stream().unwrap())))
+        ctxs.push((ctx, kernel));
     }
     println!("======GPU(s) Ready================\n");
 
