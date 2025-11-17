@@ -54,7 +54,7 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
 
     // Update only writable channels
     for (int ch = 0; ch < OUT_CHS; ch++) {
-        sub[base + ch + VIS_CHS] = __saturatef(outBuf[ch]);
+        sub[base + ch + VIS_CHS] = __saturatef(outBuf[ch] + sub[base + ch + VIS_CHS]);
     }
 }
 

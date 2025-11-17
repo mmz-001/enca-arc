@@ -89,7 +89,7 @@ impl NCAExecutorCpu {
 
                 // Update only writable channels.
                 for ch in 0..OUT_CHS {
-                    *unsafe { next.get_mut((y, x, ch + VIS_CHS)).unwrap_unchecked() } = out_buf[ch]
+                    *unsafe { next.get_mut((y, x, ch + VIS_CHS)).unwrap_unchecked() } += out_buf[ch]
                 }
             }
         }
