@@ -19,10 +19,10 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
     const int y = threadIdx.x / width;
     int base = threadIdx.x * INP_CHS;
 
-    float outBuf[OUT_CHS];
+    float out_buf[OUT_CHS];
 
     for (int i = 0; i < OUT_CHS; i++) {
-        outBuf[i] = biases[i];
+        out_buf[i] = biases[i];
     }
 
     #pragma unroll
@@ -45,7 +45,7 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
             const int colIdx = inCh * NHBD_LEN + ni;
 
             for (int outCh = 0; outCh < OUT_CHS; outCh++) {
-                outBuf[outCh] += (neighVal * mask) * weights_t[colIdx][outCh];
+                out_buf[outCh] += (neighVal * mask) * weights_t[colIdx][outCh];
             }
         }
     }
@@ -54,7 +54,7 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
 
     // Update only writable channels
     for (int ch = 0; ch < OUT_CHS; ch++) {
-        sub[base + ch + VIS_CHS] = __saturatef(outBuf[ch] + sub[base + ch + VIS_CHS]);
+        sub[base + ch + VIS_CHS] = __saturatef(out_buf[ch] + sub[base + ch + VIS_CHS]);
     }
 }
 
