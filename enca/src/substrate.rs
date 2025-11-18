@@ -1,6 +1,6 @@
 use crate::{
-    color::{ENCODING, decode_color},
-    constants::{INP_CHS, RW_CH_RNG},
+    color::{EMBEDDING, decode_color},
+    constants::{INP_CHS, RO_CH_RNG, RW_CH_RNG},
     grid::Grid,
 };
 use ndarray::{Array3, s};
@@ -17,14 +17,14 @@ impl Substrate {
     pub fn from_grid(grid: &Grid) -> Self {
         let height = grid.height();
         let width = grid.width();
-        let mut data = Array3::zeros((height, width, INP_CHS));
+        let mut data = Array3::<f32>::zeros((height, width, INP_CHS));
+        let embedding = &*EMBEDDING;
 
         for yi in 0..height {
             for xi in 0..width {
                 let v = grid[(yi, xi)];
-                let encoded = &ENCODING[v as usize];
-                for i in 0..encoded.len() {
-                    data[(yi, xi, i)] = encoded[i]
+                for i in RO_CH_RNG {
+                    data[(yi, xi, i)] = embedding[(v as usize, i)]
                 }
             }
         }
