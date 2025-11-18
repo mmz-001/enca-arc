@@ -39,13 +39,16 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
         #pragma unroll
         for (int inCh = 0; inCh < INP_CHS; inCh++) {
 
-            const float neighVal = sub[nbase + inCh];
-            // Alive masking
-            const float mask = (neighVal >= 0.5f) ? 1.0f : 0.0f;
-            const int colIdx = inCh * NHBD_LEN + ni;
+            const float neigh_val = sub[nbase + inCh];
 
+            // Alive masking
+            if (neigh_val < 0.5f) {
+                continue;
+            }
+
+            const int colIdx = inCh * NHBD_LEN + ni;
             for (int outCh = 0; outCh < OUT_CHS; outCh++) {
-                out_buf[outCh] += (neighVal * mask) * weights_t[colIdx][outCh];
+                out_buf[outCh] += neigh_val * weights_t[colIdx][outCh];
             }
         }
     }
