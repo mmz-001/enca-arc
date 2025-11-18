@@ -50,17 +50,12 @@ pub fn compute_fitness_pop(examples: &[TrainExample], ncas: Vec<NCA>, config: &C
         let nca = individual.nca;
 
         for (example, pred_substrate) in examples.iter().zip(pred_substrates) {
-            // The RW channels contain the output of the executor
-            let pred_vis_slice = s![.., .., RW_CH_RNG];
-            // The RO channels of the tgt substrate contain the ground truth.
-            let tgt_vis_slice = s![.., .., RO_CH_RNG];
-
-            let pred_vis_chs = pred_substrate.data.slice(pred_vis_slice);
+            let pred_vis_chs = pred_substrate.data.slice(s![.., .., RW_CH_RNG]);
 
             let mut tgt_grid = example.output.clone();
             nca.transform_pipeline.apply(&mut tgt_grid);
             let tgt_substrate = Substrate::from_grid(&tgt_grid);
-            let out_vis_chs = tgt_substrate.data.slice(tgt_vis_slice);
+            let out_vis_chs = tgt_substrate.data.slice(s![.., .., RO_CH_RNG]);
 
             let diff = &pred_vis_chs - &out_vis_chs;
             let err = diff.mapv(f64::from).pow2().mean().unwrap();
