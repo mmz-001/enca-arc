@@ -6,7 +6,7 @@ use rand_chacha::ChaCha8Rng;
 fn main() {
     let mut rng = ChaCha8Rng::seed_from_u64(1);
     let tasks_path = "./data/v2/arc-agi_evaluation_challenges.json";
-    let dataset = Dataset::load(&tasks_path, None);
+    let dataset = Dataset::load(tasks_path, None);
     let n_ncas = 10;
 
     let task = &dataset.get_task("36a08778").unwrap();

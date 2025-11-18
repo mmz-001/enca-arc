@@ -382,7 +382,7 @@ impl AppState {
         substrate.display_channels_panel(l.igx, l.igy + l.ig_pad, l.gs * 1.1, l.gs / 1.4);
 
         // Params UI
-        draw_params(l.params_x, l.params_y, l.params_w, l.params_h, &self.executor.nca());
+        draw_params(l.params_x, l.params_y, l.params_w, l.params_h, self.executor.nca());
 
         let (clicked, tooltip) = draw_metrics(
             l.metrics_x,

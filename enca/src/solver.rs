@@ -61,7 +61,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> Vec<Trai
 
             let mut rng = ChaCha8Rng::seed_from_u64(seeds[i] + epoch as u64);
 
-            let mut idxs = (0..N_PARAMS).into_iter().collect_vec();
+            let mut idxs = (0..N_PARAMS).collect_vec();
             idxs.shuffle(&mut rng);
 
             new_individual.train_param_idxs = idxs[0..(config.subset_size).min(idxs.len())].to_vec();
