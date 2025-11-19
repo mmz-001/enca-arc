@@ -20,7 +20,7 @@ pub struct NCA {
 
 impl NCA {
     pub fn new(max_steps: usize) -> Self {
-        let weights = vec![0.0; OUT_CHS * INP_DIM];
+        let weights = vec![0.0; INP_DIM * OUT_CHS];
         let biases = vec![0.0; OUT_CHS];
 
         Self {

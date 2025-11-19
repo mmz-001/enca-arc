@@ -1,5 +1,5 @@
 use crate::{
-    constants::{INP_CHS, INP_DIM, NHBD, NHBD_LEN, OUT_CHS, VIS_CHS},
+    constants::{INP_CHS, NHBD, NHBD_LEN, OUT_CHS, VIS_CHS},
     grid::Grid,
     nca::NCA,
     substrate::Substrate,
@@ -80,7 +80,7 @@ impl NCAExecutorCpu {
                         let col_idx = inp_ch_idx * NHBD_LEN + ni;
 
                         for i in 0..OUT_CHS {
-                            let wi = i * INP_DIM + col_idx;
+                            let wi = col_idx * OUT_CHS + i;
                             out_buf[i] =
                                 f32::mul_add(neighbor_val, unsafe { *self.nca.weights.get_unchecked(wi) }, out_buf[i]);
                         }

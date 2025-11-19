@@ -102,14 +102,8 @@ impl Substrate {
 pub fn draw_params(x: f32, y: f32, w: f32, h: f32, nca: &NCA) {
     draw_rectangle_lines(x, y, w, h, 1.0, WHITE.with_alpha(0.5));
 
-    let shape = (OUT_CHS, INP_DIM);
     draw_text(
-        &format!(
-            "weights={}, biases={}, shape={:?}",
-            nca.weights.len(),
-            nca.biases.len(),
-            shape
-        ),
+        &format!("weights={}, biases={}", nca.weights.len(), nca.biases.len(),),
         x,
         y + h + 20.0,
         24.0,
@@ -127,7 +121,7 @@ pub fn draw_params(x: f32, y: f32, w: f32, h: f32, nca: &NCA) {
 
     for yi in 0..n_rows {
         for xi in 0..n_cols {
-            let idx = yi * INP_DIM + xi;
+            let idx = yi * OUT_CHS + xi;
             if idx >= nca.weights.len() {
                 continue;
             }
