@@ -36,30 +36,6 @@
 //! let results = cmaes_state.run();
 //! ```
 //!
-//! For many problems, it is useful to perform multiple independent restarts of the algorithm with
-//! varying initial parameters. The [`restart`] module implements several automatic restart
-//! strategies to this end. To use them, create and build a
-//! [`RestartOptions`][crate::restart::RestartOptions] and call
-//! [`Restarter::run`][crate::restart::Restarter::run],
-//! [`Restarter::run_parallel`][crate::restart::Restarter::run_parallel`], or another `run_*`
-//! method. This option provides greater robustness in solving more complex
-//! problems but provides less control over individual runs.
-//! ```no_run
-//! use cmaes::restart::{RestartOptions, RestartStrategy};
-//! use cmaes::DVector;
-//!
-//! let sphere = |x: &DVector<f64>| x.iter().map(|xi| xi.powi(2)).sum();
-//!
-//! let dim = 10;
-//! let strategy = RestartStrategy::BIPOP(Default::default());
-//! let restarter = RestartOptions::new(dim, -5.0..=5.0, strategy)
-//!     .fun_target(1e-8)
-//!     .enable_printing(true)
-//!     .build()
-//!     .unwrap();
-//!
-//! let results = restarter.run_parallel(|| sphere);
-//! ```
 //!
 //! # Further configuration
 //!
