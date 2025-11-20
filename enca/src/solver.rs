@@ -23,6 +23,8 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
         .map(|_| IndividualState::new(&mut indexer, task.clone(), config.clone()))
         .collect_vec();
 
+    let mut solved: Vec<IndividualState> = vec![];
+
     // Pre-generate seeds
     let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
     let mut metrics = TrainMetrics { epoch_metrics: vec![] };
@@ -32,24 +34,19 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
             println!("epoch={epoch}");
         }
 
-        if epoch.is_multiple_of(10) {
-            let (unsolved, solved): (Vec<_>, Vec<_>) =
-                population.iter().partition(|individual| individual.mean_acc < 1.0);
+        if epoch.is_multiple_of(20) {
+            population = selector
+                .select(&population.iter().collect_vec(), &mut rng)
+                .into_iter()
+                .cloned()
+                .collect_vec();
+        }
 
-            let unsolved_selected = selector.select(&unsolved, &mut rng);
+        if population.len() < config.pop {
+            let deficit = config.pop - population.len();
 
-            population = [
-                solved.into_iter().cloned().collect_vec(),
-                unsolved_selected.into_iter().cloned().collect_vec(),
-            ]
-            .concat();
-
-            if population.len() < config.pop {
-                let deficit = config.pop - population.len();
-
-                for _ in 0..deficit {
-                    population.push(IndividualState::new(&mut indexer, task.clone(), config.clone()));
-                }
+            for _ in 0..deficit {
+                population.push(IndividualState::new(&mut indexer, task.clone(), config.clone()));
             }
         }
 
@@ -104,10 +101,11 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
             }
         });
 
-        let solved = population
-            .iter()
-            .filter(|individual| individual.mean_acc == 1.0)
-            .count();
+        let (unsolved, epoch_solved): (Vec<_>, Vec<_>) =
+            population.iter().partition(|individual| individual.mean_acc < 1.0);
+
+        solved.extend(epoch_solved.into_iter().cloned());
+
         if verbose {
             let best_fitness = population
                 .iter()
@@ -122,10 +120,9 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
                 .unwrap();
 
             println!(
-                "Pop solved: count={}/{} pct: {:.3}%, best fitness={:.3e}, best accuracy={:.3}",
-                solved,
+                "pop={}, solved count={}, pop best: fitness={:.3e}, accuracy={:.3}",
                 population.len(),
-                solved as f32 / population.len() as f32 * 100.0,
+                solved.len(),
                 best_fitness,
                 best_acc,
             );
@@ -142,8 +139,11 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
                     .collect_vec(),
             });
         }
+
+        population = unsolved.into_iter().cloned().collect_vec();
     }
 
+    population.extend(solved);
     let mut train_ncas = Vec::with_capacity(population.len());
 
     for individual in population {
