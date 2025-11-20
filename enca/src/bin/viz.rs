@@ -441,7 +441,7 @@ async fn draw(
         augmented_ncas,
         metrics,
         initial_task_idx,
-        10.0, // fps
+        20.0, // fps
     );
 
     loop {
