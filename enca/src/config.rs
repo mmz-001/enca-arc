@@ -29,13 +29,13 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            epochs: 80,
-            max_steps: 50,
+            epochs: 100,
+            max_steps: 40,
             pop: 12,
             k: 2,
             subset_size: 120,
             max_fun_evals: 500,
-            initial_sigma: 0.02,
+            initial_sigma: 0.1,
             l2_coeff: 5e-5,
             backend: Backend::GPU,
         }
