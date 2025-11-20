@@ -6,7 +6,7 @@ use crate::selector::{Optimize, Score, TournamentSelector};
 use crate::utils::mean;
 use crate::{dataset::Task, nca::NCA};
 use cmaes::objective_function::BatchObjectiveFunction;
-use cmaes::{CMAESOptions, DVector, ObjectiveFunction};
+use cmaes::{CMAESOptions, DVector};
 use core::f32;
 use itertools::Itertools;
 use rand::seq::SliceRandom;
@@ -192,20 +192,6 @@ impl BatchObjectiveFunction for IndividualState {
 impl BatchObjectiveFunction for &mut IndividualState {
     fn evaluate_batch(&self, x: &[DVector<f64>]) -> Vec<f64> {
         IndividualState::evaluate_batch(self, x)
-    }
-}
-
-impl ObjectiveFunction for IndividualState {
-    fn evaluate(&mut self, x: &DVector<f64>) -> f64 {
-        let ncas = vec![construct_nca(self, x)];
-        let examples = &self.task.train;
-        compute_fitness_pop(examples, ncas, &self.config)[0]
-    }
-}
-
-impl ObjectiveFunction for &mut IndividualState {
-    fn evaluate(&mut self, x: &DVector<f64>) -> f64 {
-        IndividualState::evaluate(self, x)
     }
 }
 
