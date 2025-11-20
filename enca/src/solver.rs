@@ -31,7 +31,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
 
     for epoch in 0..config.epochs {
         if verbose {
-            println!("epoch={epoch}");
+            print!("epoch={epoch:03}, ");
         }
 
         if epoch.is_multiple_of(20) {
@@ -51,7 +51,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
         }
 
         let seed = rng.random();
-        solve_pop(&mut population, task, seed, config.clone());
+        solve_pop(&mut population, task, seed, config.clone(), None);
 
         let (unsolved, epoch_solved): (Vec<_>, Vec<_>) =
             population.iter().partition(|individual| individual.mean_acc < 1.0);
@@ -72,8 +72,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
                 .unwrap();
 
             println!(
-                "pop={}, solved count={}, pop best: fitness={:.3e}, accuracy={:.3}",
-                population.len(),
+                "solved count={}, pop best: fitness={:.3e}, accuracy={:.3}",
                 solved.len(),
                 best_fitness,
                 best_acc,
@@ -94,6 +93,15 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
 
         population = unsolved.into_iter().cloned().collect_vec();
     }
+
+    println!("Optimizing solved...");
+
+    let mut final_solve_config = config.clone();
+    final_solve_config.subset_size = N_PARAMS;
+    final_solve_config.max_fun_evals = config.max_fun_evals * 50;
+
+    let seed = rng.random();
+    solve_pop(&mut solved, task, seed, config.clone(), Some(N_PARAMS));
 
     population.extend(solved);
     let mut train_ncas = Vec::with_capacity(population.len());
@@ -123,7 +131,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
     }
 }
 
-fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, config: Config) {
+fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, config: Config, lambda: Option<usize>) {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
 
@@ -145,13 +153,14 @@ fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, conf
             .map(|&i| all_params[i] as f64)
             .collect();
 
-        let mut es_state = LMCMAOptions::new(initial_mean, config.initial_sigma)
+        let mut es_state_builder = LMCMAOptions::new(initial_mean, config.initial_sigma)
             .tol_fun_hist(1e-12)
             .fun_target(1e-7)
             .seed(seeds[i])
-            .max_function_evals(config.max_fun_evals)
-            .build(new_individual.clone())
-            .unwrap();
+            .max_function_evals(config.max_fun_evals);
+        es_state_builder.lambda = lambda;
+
+        let mut es_state = es_state_builder.build(new_individual.clone()).unwrap();
 
         let results = es_state.run_batch();
 

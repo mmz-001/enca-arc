@@ -33,7 +33,7 @@ pub struct TerminationData {
 pub struct LMCMAOptions {
     x0: DVector<f64>,
     sigma0: f64,
-    lambda: Option<usize>,
+    pub lambda: Option<usize>,
     fun_target: f64,
     max_function_evals: usize,
     tol_fun_hist: f64,
