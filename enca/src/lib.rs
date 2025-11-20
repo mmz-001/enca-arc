@@ -8,6 +8,7 @@ pub mod drawing;
 pub mod env;
 pub mod executors;
 pub mod grid;
+pub mod lmcma;
 pub mod metrics;
 pub mod nca;
 pub mod plotting;

@@ -1,12 +1,13 @@
 use crate::config::Config;
 use crate::constants::{BIASES_RNG, N_PARAMS, WEIGHTS_RNG};
 use crate::env::{compute_fitness_pop, eval};
+use crate::lmcma::LMCMAOptions;
 use crate::metrics::{EpochMetrics, IndividualMetrics, TrainIndividual, TrainMetrics, TrainOutput};
 use crate::selector::{Optimize, Score, TournamentSelector};
 use crate::utils::mean;
 use crate::{dataset::Task, nca::NCA};
+use cmaes::DVector;
 use cmaes::objective_function::BatchObjectiveFunction;
-use cmaes::{CMAESOptions, DVector};
 use core::f32;
 use itertools::Itertools;
 use rand::seq::SliceRandom;
@@ -68,7 +69,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
                 .map(|&i| all_params[i] as f64)
                 .collect();
 
-            let mut es_state = CMAESOptions::new(initial_mean, config.initial_sigma)
+            let mut es_state = LMCMAOptions::new(initial_mean, config.initial_sigma)
                 .tol_fun_hist(1e-12)
                 .fun_target(1e-7)
                 .seed(seeds[i] + epoch as u64)
