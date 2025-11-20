@@ -7,7 +7,7 @@ use enca::config::Config;
 use enca::criteria::train_preserves_grid_size;
 use enca::executors::Backend;
 use enca::executors::gpu::CUDA;
-use enca::metrics::{OverallSummary, TaskReport, TrainOutput};
+use enca::metrics::{OverallSummary, TaskReport};
 use enca::serde_utils::JSONReadWrite;
 use enca::utils::{mean, timestamp_for_dir};
 use enca::voting::vote;
@@ -150,10 +150,11 @@ fn main() {
                 return default_outcome;
             }
 
-            let train_result = train(task, verbose, &config, seed);
+            let train_output = train(task, verbose, &config, seed);
+            let train_result = train_output.population;
 
             let best_train_result = train_result[0].clone();
-            let TrainOutput { train_accs, .. } = best_train_result;
+            let train_accs = best_train_result.train_accs;
 
             let mut test_ncas = Vec::with_capacity(task.test.len());
 

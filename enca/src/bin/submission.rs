@@ -76,6 +76,7 @@ fn main() {
             let mut test_submission_outputs: Vec<TestSubmissionOutput> = Vec::with_capacity(task.test.len());
 
             let solved_train = train_result
+                .population
                 .clone()
                 .into_iter()
                 .filter(|result| mean(&result.train_accs) == 1.0)
@@ -86,7 +87,7 @@ fn main() {
             }
 
             let selected_train = if solved_train.is_empty() {
-                train_result
+                train_result.population
             } else {
                 solved_train
             };

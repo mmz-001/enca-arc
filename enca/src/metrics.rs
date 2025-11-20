@@ -23,8 +23,13 @@ pub struct OverallSummary {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct TrainOutput {
+pub struct TrainIndividual {
     pub nca: NCA,
     pub train_accs: Vec<f32>,
     pub fitness: f32,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TrainOutput {
+    pub population: Vec<TrainIndividual>,
 }

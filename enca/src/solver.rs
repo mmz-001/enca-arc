@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::constants::{BIASES_RNG, N_PARAMS, WEIGHTS_RNG};
 use crate::env::{compute_fitness_pop, eval};
-use crate::metrics::TrainOutput;
+use crate::metrics::{TrainIndividual, TrainOutput};
 use crate::selector::{Optimize, Score, TournamentSelector};
 use crate::utils::mean;
 use crate::{dataset::Task, nca::NCA};
@@ -14,7 +14,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
-pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> Vec<TrainOutput> {
+pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOutput {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let selector = TournamentSelector::new(config.k, Optimize::Maximize);
 
@@ -145,7 +145,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> Vec<Trai
 
         let fitness = individual.fitness;
 
-        train_ncas.push(TrainOutput {
+        train_ncas.push(TrainIndividual {
             nca: individual.nca,
             train_accs: accs,
             fitness,
@@ -155,7 +155,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> Vec<Trai
     train_ncas.sort_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap());
     train_ncas.sort_by(|b, a| mean(&a.train_accs).partial_cmp(&mean(&b.train_accs)).unwrap());
 
-    train_ncas
+    TrainOutput { population: train_ncas }
 }
 
 #[derive(Clone)]
