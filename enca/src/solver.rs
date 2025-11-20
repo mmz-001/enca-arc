@@ -4,7 +4,7 @@ use crate::env::{compute_fitness_pop, eval};
 use crate::lmcma::LMCMAOptions;
 use crate::metrics::{EpochMetrics, IndividualMetrics, TrainIndividual, TrainMetrics, TrainOutput};
 use crate::selector::{Optimize, Score, TournamentSelector};
-use crate::utils::mean;
+use crate::utils::{mean, median};
 use crate::{dataset::Task, nca::NCA};
 use cmaes::DVector;
 use cmaes::objective_function::BatchObjectiveFunction;
@@ -21,32 +21,35 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
     let mut indexer = 0;
 
     let mut population = (0..config.pop)
-        .map(|_| IndividualState::new(&mut indexer, task.clone(), config.clone()))
+        .map(|_| IndividualState::new(&mut indexer, task.clone(), config.clone(), 0))
         .collect_vec();
 
     let mut solved: Vec<IndividualState> = vec![];
 
     // Pre-generate seeds
     let mut metrics = TrainMetrics { epoch_metrics: vec![] };
+    let mut select_epochs = vec![config.epochs];
+    let mut stagnant_epochs = 0;
 
     for epoch in 0..config.epochs {
         if verbose {
             print!("epoch={epoch:03}, ");
         }
 
-        if epoch.is_multiple_of(20) {
+        if stagnant_epochs >= median(&select_epochs) {
             population = selector
                 .select(&population.iter().collect_vec(), &mut rng)
                 .into_iter()
                 .cloned()
                 .collect_vec();
+            stagnant_epochs = 0;
         }
 
         if population.len() < config.pop {
             let deficit = config.pop - population.len();
 
             for _ in 0..deficit {
-                population.push(IndividualState::new(&mut indexer, task.clone(), config.clone()));
+                population.push(IndividualState::new(&mut indexer, task.clone(), config.clone(), epoch));
             }
         }
 
@@ -55,6 +58,11 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
 
         let (unsolved, epoch_solved): (Vec<_>, Vec<_>) =
             population.iter().partition(|individual| individual.mean_acc < 1.0);
+
+        if !epoch_solved.is_empty() {
+            select_epochs.push(epoch_solved.iter().map(|ind| epoch - ind.epoch).min().unwrap());
+        }
+        stagnant_epochs += 1;
 
         solved.extend(epoch_solved.into_iter().cloned());
 
@@ -72,10 +80,12 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
                 .unwrap();
 
             println!(
-                "solved count={}, pop best: fitness={:.3e}, accuracy={:.3}",
+                "solved={}, pop best: fitness={:.3e}, accuracy={:.3}, stagnant={}, select={}",
                 solved.len(),
                 best_fitness,
                 best_acc,
+                stagnant_epochs,
+                median(&select_epochs)
             );
 
             metrics.epoch_metrics.push(EpochMetrics {
@@ -191,6 +201,7 @@ fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, conf
 #[derive(Clone)]
 struct IndividualState {
     id: usize,
+    epoch: usize,
     task: Task,
     nca: NCA,
     fitness: f32,
@@ -200,7 +211,7 @@ struct IndividualState {
 }
 
 impl IndividualState {
-    fn new(indexer: &mut usize, task: Task, config: Config) -> Self {
+    fn new(indexer: &mut usize, task: Task, config: Config, epoch: usize) -> Self {
         let id = indexer.clone();
         *indexer += 1;
 
@@ -208,6 +219,7 @@ impl IndividualState {
 
         IndividualState {
             id,
+            epoch,
             nca,
             task,
             fitness: f32::INFINITY,
