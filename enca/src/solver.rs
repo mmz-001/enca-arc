@@ -27,7 +27,6 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
     let mut solved: Vec<IndividualState> = vec![];
 
     // Pre-generate seeds
-    let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
     let mut metrics = TrainMetrics { epoch_metrics: vec![] };
 
     for epoch in 0..config.epochs {
@@ -51,56 +50,8 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
             }
         }
 
-        population.par_iter_mut().enumerate().for_each(|(i, individual)| {
-            let mut new_individual = individual.clone();
-            let new_nca = &mut new_individual.nca;
-
-            let mut rng = ChaCha8Rng::seed_from_u64(seeds[i] + epoch as u64);
-
-            let mut idxs = (0..N_PARAMS).collect_vec();
-            idxs.shuffle(&mut rng);
-
-            new_individual.train_param_idxs = idxs[0..(config.subset_size).min(idxs.len())].to_vec();
-
-            let all_params = new_nca.to_vec();
-            let initial_mean: Vec<f64> = new_individual
-                .train_param_idxs
-                .iter()
-                .map(|&i| all_params[i] as f64)
-                .collect();
-
-            let mut es_state = LMCMAOptions::new(initial_mean, config.initial_sigma)
-                .tol_fun_hist(1e-12)
-                .fun_target(1e-7)
-                .seed(seeds[i] + epoch as u64)
-                .max_function_evals(config.max_fun_evals)
-                .build(new_individual.clone())
-                .unwrap();
-
-            let results = es_state.run_batch();
-
-            let overall_best = results.overall_best.unwrap();
-
-            let point = overall_best.point.clone();
-            let fitness = overall_best.value;
-
-            let new_nca = construct_nca(&new_individual, &point);
-
-            let accs = task
-                .train
-                .iter()
-                .map(|example| eval(&example.input, &example.output, &new_nca, config.backend.clone()))
-                .collect_vec();
-
-            let mean_acc = mean(&accs);
-
-            if mean_acc >= individual.mean_acc {
-                individual.nca = new_nca;
-                individual.fitness = fitness as f32;
-                individual.mean_acc = mean_acc;
-                individual.train_param_idxs = new_individual.train_param_idxs;
-            }
-        });
+        let seed = rng.random();
+        solve_pop(&mut population, task, seed, config.clone());
 
         let (unsolved, epoch_solved): (Vec<_>, Vec<_>) =
             population.iter().partition(|individual| individual.mean_acc < 1.0);
@@ -170,6 +121,62 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
         population: train_ncas,
         metrics,
     }
+}
+
+fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, config: Config) {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
+
+    population.par_iter_mut().enumerate().for_each(|(i, individual)| {
+        let mut new_individual = individual.clone();
+        let new_nca = &mut new_individual.nca;
+
+        let mut rng = ChaCha8Rng::seed_from_u64(seeds[i]);
+
+        let mut idxs = (0..N_PARAMS).collect_vec();
+        idxs.shuffle(&mut rng);
+
+        new_individual.train_param_idxs = idxs[0..(config.subset_size).min(idxs.len())].to_vec();
+
+        let all_params = new_nca.to_vec();
+        let initial_mean: Vec<f64> = new_individual
+            .train_param_idxs
+            .iter()
+            .map(|&i| all_params[i] as f64)
+            .collect();
+
+        let mut es_state = LMCMAOptions::new(initial_mean, config.initial_sigma)
+            .tol_fun_hist(1e-12)
+            .fun_target(1e-7)
+            .seed(seeds[i])
+            .max_function_evals(config.max_fun_evals)
+            .build(new_individual.clone())
+            .unwrap();
+
+        let results = es_state.run_batch();
+
+        let overall_best = results.overall_best.unwrap();
+
+        let point = overall_best.point.clone();
+        let fitness = overall_best.value;
+
+        let new_nca = construct_nca(&new_individual, &point);
+
+        let accs = task
+            .train
+            .iter()
+            .map(|example| eval(&example.input, &example.output, &new_nca, config.backend.clone()))
+            .collect_vec();
+
+        let mean_acc = mean(&accs);
+
+        if mean_acc >= individual.mean_acc {
+            individual.nca = new_nca;
+            individual.fitness = fitness as f32;
+            individual.mean_acc = mean_acc;
+            individual.train_param_idxs = new_individual.train_param_idxs;
+        }
+    });
 }
 
 #[derive(Clone)]
