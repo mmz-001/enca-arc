@@ -10,6 +10,7 @@ pub mod executors;
 pub mod grid;
 pub mod metrics;
 pub mod nca;
+pub mod plotting;
 pub mod selector;
 pub mod serde_utils;
 pub mod solver;

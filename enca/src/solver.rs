@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::constants::{BIASES_RNG, N_PARAMS, WEIGHTS_RNG};
 use crate::env::{compute_fitness_pop, eval};
-use crate::metrics::{TrainIndividual, TrainOutput};
+use crate::metrics::{EpochMetrics, IndividualMetrics, TrainIndividual, TrainMetrics, TrainOutput};
 use crate::selector::{Optimize, Score, TournamentSelector};
 use crate::utils::mean;
 use crate::{dataset::Task, nca::NCA};
@@ -17,20 +17,15 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelI
 pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOutput {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let selector = TournamentSelector::new(config.k, Optimize::Maximize);
+    let mut indexer = 0;
 
-    let individual = IndividualState {
-        nca: NCA::new(config.max_steps),
-        task: task.clone(),
-        fitness: f32::INFINITY,
-        config: config.clone(),
-        train_param_idxs: vec![],
-        mean_acc: 0.0,
-    };
-
-    let mut population = vec![individual.clone(); config.pop];
+    let mut population = (0..config.pop)
+        .map(|_| IndividualState::new(&mut indexer, task.clone(), config.clone()))
+        .collect_vec();
 
     // Pre-generate seeds
     let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
+    let mut metrics = TrainMetrics { epoch_metrics: vec![] };
 
     for epoch in 0..config.epochs {
         if verbose {
@@ -51,7 +46,10 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
 
             if population.len() < config.pop {
                 let deficit = config.pop - population.len();
-                population.extend(vec![individual.clone(); deficit]);
+
+                for _ in 0..deficit {
+                    population.push(IndividualState::new(&mut indexer, task.clone(), config.clone()));
+                }
             }
         }
 
@@ -130,7 +128,19 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
                 solved as f32 / population.len() as f32 * 100.0,
                 best_fitness,
                 best_acc,
-            )
+            );
+
+            metrics.epoch_metrics.push(EpochMetrics {
+                epoch,
+                individual_metrics: population
+                    .iter()
+                    .map(|ind| IndividualMetrics {
+                        id: ind.id,
+                        fitness: ind.fitness,
+                        mean_acc: ind.mean_acc,
+                    })
+                    .collect_vec(),
+            });
         }
     }
 
@@ -155,17 +165,40 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
     train_ncas.sort_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap());
     train_ncas.sort_by(|b, a| mean(&a.train_accs).partial_cmp(&mean(&b.train_accs)).unwrap());
 
-    TrainOutput { population: train_ncas }
+    TrainOutput {
+        population: train_ncas,
+        metrics,
+    }
 }
 
 #[derive(Clone)]
 struct IndividualState {
+    id: usize,
     task: Task,
     nca: NCA,
     fitness: f32,
     mean_acc: f32,
     config: Config,
     train_param_idxs: Vec<usize>,
+}
+
+impl IndividualState {
+    fn new(indexer: &mut usize, task: Task, config: Config) -> Self {
+        let id = indexer.clone();
+        *indexer += 1;
+
+        let nca = NCA::new(config.max_steps);
+
+        IndividualState {
+            id,
+            nca,
+            task,
+            fitness: f32::INFINITY,
+            config,
+            train_param_idxs: vec![],
+            mean_acc: 0.0,
+        }
+    }
 }
 
 fn construct_nca(individual: &IndividualState, x: &DVector<f64>) -> NCA {

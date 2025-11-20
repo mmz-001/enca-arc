@@ -29,7 +29,26 @@ pub struct TrainIndividual {
     pub fitness: f32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndividualMetrics {
+    pub id: usize,
+    pub mean_acc: f32,
+    pub fitness: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EpochMetrics {
+    pub epoch: usize,
+    pub individual_metrics: Vec<IndividualMetrics>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainMetrics {
+    pub epoch_metrics: Vec<EpochMetrics>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TrainOutput {
     pub population: Vec<TrainIndividual>,
+    pub metrics: TrainMetrics,
 }

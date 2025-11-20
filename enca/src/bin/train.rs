@@ -151,6 +151,13 @@ fn main() {
             }
 
             let train_output = train(task, verbose, &config, seed);
+
+            if verbose {
+                if let Err(e) = enca::plotting::plot_metrics(&train_output.metrics, &out_dir, task_id) {
+                    eprintln!("Failed to plot metrics for task {}: {}", task_id, e);
+                }
+            }
+
             let train_result = train_output.population;
 
             let best_train_result = train_result[0].clone();
