@@ -16,7 +16,7 @@ ndarray-rand = "0.15.0"
 ndarray-stats = "0.6.0"
 cmaes = { path = "../cmaes" }
 clap = { version = "4.5.46", features = ["derive"] }
-nalgebra = "0.33"
+nalgebra = "0.34.1"
 criterion = { version = "0.7.0", features = ["html_reports"] }
 mimalloc = "0.1.48"
 chrono = { version = "0.4.42", features = ["clock"] }
