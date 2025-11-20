@@ -33,7 +33,7 @@ impl Default for Config {
             max_steps: 50,
             pop: 12,
             k: 2,
-            subset_size: 100,
+            subset_size: 120,
             max_fun_evals: 500,
             initial_sigma: 0.02,
             l2_coeff: 5e-5,
