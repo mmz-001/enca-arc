@@ -8,11 +8,11 @@ Blog: [enca-arc.mmzdev.com](https://enca-arc.mmzdev.com)
 
 Install Rust following instructions at [rustup.rs](https://rustup.rs/)
 
-Linux setup
+Ubuntu Linux setup
 
 ```shell
 sudo apt update && sudo apt install git build-essential pkg-config libfreetype6-dev libfontconfig1-dev -y
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && . "$HOME/.cargo/env"
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . "$HOME/.cargo/env"
 git clone https://github.com/mmz-001/enca-arc
 cd enca-arc/enca
 ```
