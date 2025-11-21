@@ -17,7 +17,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelI
 
 pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOutput {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let selector = TournamentSelector::new(config.k, Optimize::Maximize);
+    let selector = TournamentSelector::new(config.k, Optimize::Minimize);
     let mut indexer = 0;
 
     let mut population = (0..config.pop)
@@ -189,7 +189,7 @@ fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, conf
 
         let mean_acc = mean(&accs);
 
-        if mean_acc >= individual.mean_acc {
+        if fitness <= individual.fitness as f64 {
             individual.nca = new_nca;
             individual.fitness = fitness as f32;
             individual.mean_acc = mean_acc;
@@ -259,6 +259,6 @@ impl BatchObjectiveFunction for &mut IndividualState {
 
 impl Score for IndividualState {
     fn score(&self) -> f32 {
-        self.mean_acc
+        self.fitness
     }
 }
