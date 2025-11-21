@@ -163,14 +163,14 @@ fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, conf
             .map(|&i| all_params[i] as f64)
             .collect();
 
-        let mut es_state_builder = LMCMAOptions::new(initial_mean, config.initial_sigma)
+        let mut es_state = LMCMAOptions::new(initial_mean, config.initial_sigma)
             .tol_fun_hist(1e-12)
             .fun_target(1e-7)
             .seed(seeds[i])
-            .max_function_evals(config.max_fun_evals);
-        es_state_builder.lambda = lambda;
-
-        let mut es_state = es_state_builder.build(new_individual.clone()).unwrap();
+            .max_function_evals(config.max_fun_evals)
+            .lambda(lambda)
+            .build(new_individual.clone())
+            .unwrap();
 
         let results = es_state.run_batch();
 

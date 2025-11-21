@@ -33,7 +33,7 @@ pub struct TerminationData {
 pub struct LMCMAOptions {
     x0: DVector<f64>,
     sigma0: f64,
-    pub lambda: Option<usize>,
+    lambda: Option<usize>,
     fun_target: f64,
     max_function_evals: usize,
     tol_fun_hist: f64,
@@ -90,8 +90,8 @@ impl LMCMAOptions {
         self
     }
 
-    pub fn lambda(mut self, lambda: usize) -> Self {
-        self.lambda = Some(lambda);
+    pub fn lambda(mut self, lambda: Option<usize>) -> Self {
+        self.lambda = lambda;
         self
     }
 
@@ -105,8 +105,8 @@ impl LMCMAOptions {
         self
     }
 
-    pub fn time_limit(mut self, limit: Duration) -> Self {
-        self.time_limit = Some(limit);
+    pub fn time_limit(mut self, limit: Option<Duration>) -> Self {
+        self.time_limit = limit;
         self
     }
 
@@ -121,28 +121,28 @@ impl LMCMAOptions {
     }
 
     // LMCMA-specific builder methods (optional)
-    pub fn m(mut self, m: usize) -> Self {
-        self.m = Some(m);
+    pub fn m(mut self, m: Option<usize>) -> Self {
+        self.m = m;
         self
     }
     pub fn base_m(mut self, base_m: usize) -> Self {
         self.base_m = base_m;
         self
     }
-    pub fn period(mut self, period: usize) -> Self {
-        self.period = Some(period);
+    pub fn period(mut self, period: Option<usize>) -> Self {
+        self.period = period;
         self
     }
-    pub fn n_steps(mut self, n_steps: usize) -> Self {
-        self.n_steps = Some(n_steps);
+    pub fn n_steps(mut self, n_steps: Option<usize>) -> Self {
+        self.n_steps = n_steps;
         self
     }
-    pub fn c_c(mut self, c_c: f64) -> Self {
-        self.c_c = Some(c_c);
+    pub fn c_c(mut self, c_c: Option<f64>) -> Self {
+        self.c_c = c_c;
         self
     }
-    pub fn c_1(mut self, c_1: f64) -> Self {
-        self.c_1 = Some(c_1);
+    pub fn c_1(mut self, c_1: Option<f64>) -> Self {
+        self.c_1 = c_1;
         self
     }
     pub fn c_s(mut self, c_s: f64) -> Self {
