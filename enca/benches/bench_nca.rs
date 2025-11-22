@@ -16,7 +16,7 @@ fn single_grid(c: &mut Criterion) {
     let grid_small = &dataset.get_task("794b24be").unwrap().train[0].input; // 3x3 grid
     let grid_large = &dataset.get_task("264363fd").unwrap().train[0].input; // 30x30 grid
 
-    let mut nca = NCA::new(100);
+    let mut nca = NCA::new(50);
     nca.initialize_random(&mut rng);
 
     let mut group = c.benchmark_group("nca_single_grid");
@@ -49,7 +49,7 @@ fn multi_grid(c: &mut Criterion) {
 
     let ncas = (0..n_ncas)
         .map(|_| {
-            let mut nca = NCA::new(100);
+            let mut nca = NCA::new(50);
             nca.initialize_random(&mut rng);
             nca
         })

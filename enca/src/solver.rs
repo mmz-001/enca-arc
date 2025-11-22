@@ -108,10 +108,10 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
 
     let mut final_solve_config = config.clone();
     final_solve_config.subset_size = N_PARAMS;
-    final_solve_config.max_fun_evals = config.max_fun_evals * 50;
-
+    final_solve_config.max_fun_evals = config.max_fun_evals * 10;
+    final_solve_config.l2_coeff = 0.0;
     let seed = rng.random();
-    solve_pop(&mut solved, task, seed, config.clone(), Some(N_PARAMS));
+    solve_pop(&mut solved, task, seed, final_solve_config.clone(), Some(N_PARAMS));
 
     population.extend(solved);
     let mut train_ncas = Vec::with_capacity(population.len());

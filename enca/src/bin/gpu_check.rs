@@ -14,7 +14,7 @@ fn main() {
     let pop_size = 4;
 
     for task in &train_dataset.tasks {
-        let max_steps = rng.random_range(1..=120);
+        let max_steps = rng.random_range(1..=50);
         let pop_ncas = (0..pop_size).map(|_| random_nca(&mut rng, max_steps)).collect_vec();
 
         let mut pop_gpu_executor =
