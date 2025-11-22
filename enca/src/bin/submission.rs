@@ -15,6 +15,8 @@ use enca::{dataset::Dataset, solver::train};
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -33,6 +35,7 @@ fn main() {
     let args = Args::parse();
     let tasks_path = args.tasks_path;
     let seed = args.seed;
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let dataset = Dataset::load(&tasks_path, None);
     let submission_path = "./submission.json";
     let config = if let Some(config_path) = args.config_path {
@@ -71,7 +74,7 @@ fn main() {
                 return default_output;
             }
 
-            let train_result = train(task, false, &config, seed);
+            let train_result = train(task, false, &config, &mut rng);
 
             let mut test_submission_outputs: Vec<TestSubmissionOutput> = Vec::with_capacity(task.test.len());
 
@@ -95,7 +98,7 @@ fn main() {
             for input in task.test_inputs() {
                 let aug_enca = selected_train
                     .iter()
-                    .map(|result| augment(input, task, result.nca.clone(), seed, &config))
+                    .map(|result| augment(input, task, result.nca.clone(), &config, &mut rng))
                     .collect_vec();
                 let top_k_aug_ncas = vote(input, &aug_enca, 2, false, config.backend.clone());
 

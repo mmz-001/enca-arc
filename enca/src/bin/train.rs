@@ -14,6 +14,8 @@ use enca::voting::vote;
 use enca::{dataset::Dataset, env::eval, solver::train};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 struct TestOutcome {
     count: usize,
@@ -64,6 +66,8 @@ fn main() {
     } else {
         rand::random()
     };
+
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
     let dataset = Dataset::load(&tasks_path, Some(&solutions_path));
     println!(
@@ -150,7 +154,7 @@ fn main() {
                 return default_outcome;
             }
 
-            let train_output = train(task, verbose, &config, seed);
+            let train_output = train(task, verbose, &config, &mut rng);
 
             if verbose {
                 if let Err(e) = enca::plotting::plot_metrics(&train_output.metrics, &out_dir, task_id) {
@@ -181,7 +185,7 @@ fn main() {
             for (input, output) in task.test_inputs().iter().zip(&solution.outputs) {
                 let aug_ncas = selected_train
                     .iter()
-                    .map(|result| augment(input, task, result.nca.clone(), seed, &config))
+                    .map(|result| augment(input, task, result.nca.clone(), &config, &mut rng))
                     .collect_vec();
                 let top_k_aug_ncas = vote(input, &aug_ncas, 2, verbose, config.backend.clone());
 

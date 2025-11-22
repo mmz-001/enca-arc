@@ -15,8 +15,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
-pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOutput {
-    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) -> TrainOutput {
     let selector = TournamentSelector::new(config.k, Optimize::Minimize);
     let mut indexer = 0;
 
@@ -38,7 +37,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
 
         if stagnant_epochs >= median(&select_epochs) {
             population = selector
-                .select(&population.iter().collect_vec(), &mut rng)
+                .select(&population.iter().collect_vec(), rng)
                 .into_iter()
                 .cloned()
                 .collect_vec();
@@ -53,8 +52,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
             }
         }
 
-        let seed = rng.random();
-        solve_pop(&mut population, task, seed, config.clone(), None);
+        solve_pop(&mut population, task, config.clone(), rng, None);
 
         let (unsolved, epoch_solved): (Vec<_>, Vec<_>) =
             population.iter().partition(|individual| individual.mean_acc < 1.0);
@@ -110,8 +108,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
     final_solve_config.subset_size = N_PARAMS;
     final_solve_config.max_fun_evals = config.max_fun_evals * 10;
     final_solve_config.l2_coeff = 0.0;
-    let seed = rng.random();
-    solve_pop(&mut solved, task, seed, final_solve_config.clone(), Some(N_PARAMS));
+    solve_pop(&mut solved, task, final_solve_config.clone(), rng, Some(N_PARAMS));
 
     population.extend(solved);
     let mut train_ncas = Vec::with_capacity(population.len());
@@ -141,8 +138,13 @@ pub fn train(task: &Task, verbose: bool, config: &Config, seed: u64) -> TrainOut
     }
 }
 
-fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, seed: u64, config: Config, lambda: Option<usize>) {
-    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+fn solve_pop(
+    population: &mut Vec<IndividualState>,
+    task: &Task,
+    config: Config,
+    rng: &mut impl Rng,
+    lambda: Option<usize>,
+) {
     let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
 
     population.par_iter_mut().enumerate().for_each(|(i, individual)| {

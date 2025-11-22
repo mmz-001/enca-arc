@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -22,8 +21,7 @@ fn colors_sorted_nonzero(set: &HashSet<u8>) -> Vec<u8> {
     set.iter().copied().filter(|&c| c != 0).sorted().collect()
 }
 
-pub fn augment(grid: &Grid, task: &Task, nca: NCA, seed: u64, config: &Config) -> NCA {
-    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+pub fn augment(grid: &Grid, task: &Task, nca: NCA, config: &Config, rng: &mut impl Rng) -> NCA {
     let ti_col_set = union_sets(task.train_inputs().iter().map(|grid| grid.colors().clone()));
     let grid_col_set = grid.colors();
 
@@ -46,7 +44,7 @@ pub fn augment(grid: &Grid, task: &Task, nca: NCA, seed: u64, config: &Config) -
     let mut pred_grid_counts = IndexMap::<u64, (usize, RemapColors)>::new();
     let empty_grid_hash = Grid::from_vec(vec![vec![0; grid.width()]; grid.height()]).get_hash();
 
-    for rank in floyd_unique_indices(total, MAX_PERMUTATIONS.min(config.max_fun_evals), &mut rng) {
+    for rank in floyd_unique_indices(total, MAX_PERMUTATIONS.min(config.max_fun_evals), rng) {
         // Sample up to MAX_PERMUTATIONS unique color remappings and get majority vote
         let perm = unrank_k_perm(rank, &ti_cols, k);
         let mut color_transform = RemapColors::new();
