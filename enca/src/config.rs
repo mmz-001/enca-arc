@@ -19,8 +19,6 @@ pub struct Config {
     pub subset_size: usize,
     /// Maximum number of function evaluations per CMA-ES run
     pub max_fun_evals: usize,
-    /// CMA-ES initial sigma
-    pub initial_sigma: f64,
     /// L2 weight decay coefficient
     pub l2_coeff: f64,
     /// Inference backend; GPU or CPU
@@ -38,7 +36,6 @@ impl Default for Config {
             k: 2,
             subset_size: 488,
             max_fun_evals: 500,
-            initial_sigma: 0.05,
             l2_coeff: 5e-5,
             backend: Backend::GPU,
         }
