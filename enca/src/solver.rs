@@ -6,8 +6,8 @@ use crate::metrics::{EpochMetrics, IndividualMetrics, TrainIndividual, TrainMetr
 use crate::selector::{Optimize, Score, TournamentSelector};
 use crate::utils::{mean, median};
 use crate::{dataset::Task, nca::NCA};
-use cmaes::DVector;
 use cmaes::objective_function::BatchObjectiveFunction;
+use cmaes::{CMAESOptions, DVector};
 use core::f32;
 use itertools::Itertools;
 use rand::seq::SliceRandom;
@@ -52,7 +52,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
             }
         }
 
-        solve_pop(&mut population, task, config.clone(), rng, None);
+        solve_pop(&mut population, task, config.clone(), rng);
 
         let (unsolved, epoch_solved): (Vec<_>, Vec<_>) =
             population.iter().partition(|individual| individual.mean_acc < 1.0);
@@ -102,14 +102,6 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
         population = unsolved.into_iter().cloned().collect_vec();
     }
 
-    println!("Optimizing solved...");
-
-    let mut final_solve_config = config.clone();
-    final_solve_config.subset_size = N_PARAMS;
-    final_solve_config.max_fun_evals = config.max_fun_evals * 10;
-    final_solve_config.l2_coeff = 0.0;
-    solve_pop(&mut solved, task, final_solve_config.clone(), rng, Some(N_PARAMS));
-
     population.extend(solved);
     let mut train_ncas = Vec::with_capacity(population.len());
 
@@ -138,13 +130,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
     }
 }
 
-fn solve_pop(
-    population: &mut Vec<IndividualState>,
-    task: &Task,
-    config: Config,
-    rng: &mut impl Rng,
-    lambda: Option<usize>,
-) {
+fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, config: Config, rng: &mut impl Rng) {
     let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
 
     population.par_iter_mut().enumerate().for_each(|(i, individual)| {
@@ -170,7 +156,6 @@ fn solve_pop(
             .fun_target(1e-7)
             .seed(seeds[i])
             .max_function_evals(config.max_fun_evals)
-            .lambda(lambda)
             .build(new_individual.clone())
             .unwrap();
 
