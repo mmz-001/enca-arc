@@ -6,8 +6,8 @@ use crate::metrics::{EpochMetrics, IndividualMetrics, TrainIndividual, TrainMetr
 use crate::selector::{Optimize, Score, TournamentSelector};
 use crate::utils::{mean, median};
 use crate::{dataset::Task, nca::NCA};
+use cmaes::DVector;
 use cmaes::objective_function::BatchObjectiveFunction;
-use cmaes::{CMAESOptions, DVector};
 use core::f32;
 use itertools::Itertools;
 use rand::seq::SliceRandom;
