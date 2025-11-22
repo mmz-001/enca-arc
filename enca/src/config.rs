@@ -7,8 +7,8 @@ use crate::executors::Backend;
 pub struct Config {
     /// Number of epochs for the evolutionary loop
     pub epochs: usize,
-    /// Maximum number of NCA steps
-    pub max_steps: usize,
+    /// Number of NCA steps executed
+    pub steps: usize,
     /// Population size for evolutionary loop
     pub pop: usize,
     /// Tournament selection size
@@ -30,7 +30,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             epochs: 100,
-            max_steps: 40,
+            steps: 40,
             pop: 12,
             k: 2,
             subset_size: 120,
