@@ -69,8 +69,7 @@ impl NCAExecutorCpu {
                     };
 
                     for inp_ch_idx in 0..INP_CHS {
-                        let neighbor_val =
-                            unsafe { *data.get((ny as usize, nx as usize, inp_ch_idx)).unwrap_unchecked() };
+                        let neighbor_val = data[(ny as usize, nx as usize, inp_ch_idx)];
 
                         // Alive masking
                         if neighbor_val < 0.5 {
@@ -81,20 +80,17 @@ impl NCAExecutorCpu {
 
                         for i in 0..OUT_CHS {
                             let wi = col_idx * OUT_CHS + i;
-                            out_buf[i] =
-                                f32::mul_add(neighbor_val, unsafe { *self.nca.weights.get_unchecked(wi) }, out_buf[i]);
+                            out_buf[i] = f32::mul_add(neighbor_val, self.nca.weights[wi], out_buf[i]);
                         }
                     }
                 }
 
                 // Update only writable channels.
                 for ch in 0..OUT_CHS {
-                    *unsafe { next.get_mut((y, x, ch + VIS_CHS)).unwrap_unchecked() } += out_buf[ch]
+                    next[(y, x, ch + VIS_CHS)] = (next[(y, x, ch + VIS_CHS)] + out_buf[ch]).clamp(0.0, 1.0);
                 }
             }
         }
-
-        next.mapv_inplace(|v| v.clamp(0.0, 1.0));
 
         substrate.data = next;
     }
