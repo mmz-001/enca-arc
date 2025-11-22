@@ -74,7 +74,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
                 .unwrap();
 
             println!(
-                "solved={}, best: id={}, fitness={:.3e}, accuracy={:.3}, stagnant={}, select={}, sigma={:.2}",
+                "solved={}, best: id={}, fitness={:.3e}, accuracy={:.3}, stagnant={}, select={}, sigma={:.4}",
                 solved.len(),
                 best.id,
                 best.fitness,
