@@ -1,4 +1,4 @@
-use enca::{dataset::Dataset, executors::gpu::PopNCAExecutorGpuBatch, nca::NCA};
+use enca::{config::Config, dataset::Dataset, executors::gpu::PopNCAExecutorGpuBatch, nca::NCA};
 use itertools::Itertools;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -11,10 +11,11 @@ fn main() {
 
     let task = &dataset.get_task("36a08778").unwrap();
     let grids = task.test_inputs();
+    let config = Config::default();
 
     let ncas = (0..n_ncas)
         .map(|_| {
-            let mut nca = NCA::new(100);
+            let mut nca = NCA::new(config.clone());
             nca.initialize_random(&mut rng);
             nca
         })

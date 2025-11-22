@@ -217,7 +217,7 @@ impl IndividualState {
         let id = indexer.clone();
         *indexer += 1;
 
-        let nca = NCA::new(config.steps);
+        let nca = NCA::new(config.clone());
 
         IndividualState {
             id,
@@ -242,7 +242,7 @@ fn construct_nca(individual: &IndividualState, x: &DVector<f64>) -> NCA {
     NCA::from_vec(
         &all_params[WEIGHTS_RNG],
         &all_params[BIASES_RNG],
-        individual.config.steps,
+        individual.config.clone(),
     )
 }
 

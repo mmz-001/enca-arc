@@ -9,7 +9,9 @@ use crate::{
 #[derive(Clone)]
 pub struct NCAExecutorCpu {
     pub nca: NCA,
-    pub steps: usize,
+    pub sup_steps: usize,
+    pub rec_steps: usize,
+    pub hid_steps: usize,
     pub substrate: Substrate,
 }
 
@@ -22,25 +24,42 @@ impl NCAExecutorCpu {
 
         Self {
             nca,
-            steps: 0,
+            sup_steps: 0,
+            rec_steps: 0,
+            hid_steps: 0,
             substrate,
         }
     }
 
     pub fn run(&mut self) {
-        for _ in 0..self.nca.max_steps {
-            self.step();
+        loop {
+            if self.step() {
+                break;
+            }
         }
     }
 
     /// Executes one iteration step.
     pub fn step(&mut self) -> bool {
-        if self.steps >= self.nca.max_steps {
+        if self.sup_steps >= self.nca.sup_steps {
             return true;
         }
-        self.update_hidden();
-        self.update_rw();
-        self.steps += 1;
+
+        if self.rec_steps >= self.nca.rec_steps {
+            self.sup_steps += 1;
+            self.rec_steps = 0;
+            self.hid_steps = 0;
+        }
+
+        if self.hid_steps >= self.nca.hid_steps {
+            self.update_rw();
+            self.rec_steps += 1;
+            self.hid_steps = 0;
+        } else {
+            self.update_hidden();
+            self.hid_steps += 1;
+        }
+
         false
     }
 
@@ -139,7 +158,7 @@ impl NCAExecutorCpu {
 
                 // Update rw channels.
                 for i in 0..VIS_CHS {
-                    next[(y, x, VIS_CHS + i)] = (next[(y, x, VIS_CHS + i)] + out_buf[i]).clamp(0.0, 1.0);
+                    next[(y, x, VIS_CHS + i)] = out_buf[i].clamp(0.0, 1.0);
                 }
             }
         }

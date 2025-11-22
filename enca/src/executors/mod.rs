@@ -56,10 +56,24 @@ impl NCAExecutor {
         }
     }
 
-    pub fn steps(&mut self) -> usize {
-        match &mut self.inner {
-            NCAExecutorInner::Cpu(cpu) => cpu.steps,
-            NCAExecutorInner::Gpu(_) => panic!("steps not implemented for GPU backend"),
+    pub fn sup_steps(&self) -> usize {
+        match &self.inner {
+            NCAExecutorInner::Cpu(cpu) => cpu.sup_steps,
+            NCAExecutorInner::Gpu(_) => panic!("sup_steps not implemented for GPU backend"),
+        }
+    }
+
+    pub fn rec_steps(&self) -> usize {
+        match &self.inner {
+            NCAExecutorInner::Cpu(cpu) => cpu.rec_steps,
+            NCAExecutorInner::Gpu(_) => panic!("rec_steps not implemented for GPU backend"),
+        }
+    }
+
+    pub fn hid_steps(&self) -> usize {
+        match &self.inner {
+            NCAExecutorInner::Cpu(cpu) => cpu.hid_steps,
+            NCAExecutorInner::Gpu(_) => panic!("hid_steps not implemented for GPU backend"),
         }
     }
 

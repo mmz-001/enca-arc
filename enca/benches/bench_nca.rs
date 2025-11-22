@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use enca::{
+    config::Config,
     dataset::Dataset,
     executors::{Backend, NCAExecutor, gpu::PopNCAExecutorGpuBatch},
     nca::NCA,
@@ -15,8 +16,9 @@ fn single_grid(c: &mut Criterion) {
 
     let grid_small = &dataset.get_task("794b24be").unwrap().train[0].input; // 3x3 grid
     let grid_large = &dataset.get_task("264363fd").unwrap().train[0].input; // 30x30 grid
+    let config = Config::default();
 
-    let mut nca = NCA::new(50);
+    let mut nca = NCA::new(config);
     nca.initialize_random(&mut rng);
 
     let mut group = c.benchmark_group("nca_single_grid");
@@ -46,10 +48,11 @@ fn multi_grid(c: &mut Criterion) {
 
     let task = &dataset.get_task("36a08778").unwrap();
     let grids = task.test_inputs();
+    let config = Config::default();
 
     let ncas = (0..n_ncas)
         .map(|_| {
-            let mut nca = NCA::new(50);
+            let mut nca = NCA::new(config.clone());
             nca.initialize_random(&mut rng);
             nca
         })

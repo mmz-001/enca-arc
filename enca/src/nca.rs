@@ -1,4 +1,5 @@
 use crate::{
+    config::Config,
     constants::{INP_DIM, N_BIASES, N_WEIGHTS, OUT_CHS},
     transforms::TransformPipeline,
 };
@@ -14,19 +15,23 @@ static GLOBAL: MiMalloc = MiMalloc;
 pub struct NCA {
     pub weights: Vec<f32>,
     pub biases: Vec<f32>,
-    pub max_steps: usize,
+    pub sup_steps: usize,
+    pub rec_steps: usize,
+    pub hid_steps: usize,
     pub transform_pipeline: TransformPipeline,
 }
 
 impl NCA {
-    pub fn new(max_steps: usize) -> Self {
+    pub fn new(config: Config) -> Self {
         let weights = vec![0.0; INP_DIM * OUT_CHS];
         let biases = vec![0.0; OUT_CHS];
 
         Self {
             weights,
             biases,
-            max_steps,
+            sup_steps: config.sup_steps,
+            rec_steps: config.rec_steps,
+            hid_steps: config.hid_steps,
             transform_pipeline: TransformPipeline::default(),
         }
     }
@@ -44,8 +49,8 @@ impl NCA {
         }
     }
 
-    pub fn from_vec(weights: &[f32], biases: &[f32], max_steps: usize) -> Self {
-        let mut nca = Self::new(max_steps);
+    pub fn from_vec(weights: &[f32], biases: &[f32], config: Config) -> Self {
+        let mut nca = Self::new(config);
 
         if weights.len() != N_WEIGHTS {
             panic!("Expected {} weights; found {}", N_WEIGHTS, weights.len())

@@ -1,4 +1,5 @@
 use enca::{
+    config::Config,
     dataset::Dataset,
     executors::{Backend, NCAExecutor, gpu::PopNCAExecutorGpuBatch},
     nca::NCA,
@@ -11,11 +12,21 @@ fn main() {
     let tasks_path = "./data/v1/arc-agi_training_challenges.json";
     let train_dataset = Dataset::load(tasks_path, None);
     let mut rng = ChaCha12Rng::seed_from_u64(1);
+
     let pop_size = 4;
 
     for task in &train_dataset.tasks {
-        let max_steps = rng.random_range(1..=50);
-        let pop_ncas = (0..pop_size).map(|_| random_nca(&mut rng, max_steps)).collect_vec();
+        let mut config = Config::default();
+        let sup_steps = rng.random_range(1..=16);
+        let rec_steps = rng.random_range(1..=3);
+        let hid_steps = rng.random_range(1..=6);
+        config.sup_steps = sup_steps;
+        config.rec_steps = rec_steps;
+        config.hid_steps = hid_steps;
+
+        let pop_ncas = (0..pop_size)
+            .map(|_| random_nca(&mut rng, config.clone()))
+            .collect_vec();
 
         let mut pop_gpu_executor =
             PopNCAExecutorGpuBatch::new(pop_ncas.clone(), &task.train_inputs().into_iter().collect_vec());
@@ -51,8 +62,8 @@ fn main() {
     println!("GPU and CPU results match exactly!")
 }
 
-fn random_nca(rng: &mut impl Rng, max_steps: usize) -> NCA {
-    let mut nca = NCA::new(max_steps);
+fn random_nca(rng: &mut impl Rng, config: Config) -> NCA {
+    let mut nca = NCA::new(config);
     nca.initialize_random(rng);
     nca
 }

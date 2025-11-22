@@ -413,12 +413,16 @@ impl AppState {
 
         // Status
         let status = format!(
-            "task_id={}, example_id={}, split={}, steps={}/{}",
+            "task_id={}, example_id={}, split={}, sup_steps={}/{}, rec_steps={}/{}, hid_steps={}/{}",
             &self.current_task.id,
             self.example_id,
             self.split,
-            self.executor.steps(),
-            self.executor.nca().max_steps
+            self.executor.sup_steps(),
+            self.executor.nca().sup_steps,
+            self.executor.rec_steps(),
+            self.executor.nca().rec_steps,
+            self.executor.hid_steps(),
+            self.executor.nca().hid_steps
         );
         draw_text(&status, l.gx, l.gy - 4.0, 24.0, WHITE);
     }
