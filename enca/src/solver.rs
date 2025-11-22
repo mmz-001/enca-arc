@@ -45,7 +45,6 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
                 .cloned()
                 .collect_vec();
             stagnant_epochs = 0;
-            sigma = initial_sigma;
         }
 
         if population.len() < config.pop {
