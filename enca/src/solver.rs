@@ -18,6 +18,9 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelI
 pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) -> TrainOutput {
     let selector = TournamentSelector::new(config.k, Optimize::Minimize);
     let mut indexer = 0;
+    let initial_sigma = 0.1;
+    let mut sigma = initial_sigma;
+    let sigma_decay = 0.1 / (config.epochs as f64);
 
     let mut population = (0..config.pop)
         .map(|_| IndividualState::new(&mut indexer, task.clone(), config.clone(), 0))
@@ -42,6 +45,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
                 .cloned()
                 .collect_vec();
             stagnant_epochs = 0;
+            sigma = initial_sigma;
         }
 
         if population.len() < config.pop {
@@ -52,7 +56,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
             }
         }
 
-        solve_pop(&mut population, task, config.clone(), rng);
+        solve_pop(&mut population, task, config.clone(), sigma, rng);
 
         let (unsolved, epoch_solved): (Vec<_>, Vec<_>) =
             population.iter().partition(|individual| individual.mean_acc < 1.0);
@@ -65,25 +69,20 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
         solved.extend(epoch_solved.into_iter().cloned());
 
         if verbose {
-            let best_fitness = population
+            let best = population
                 .iter()
-                .map(|ind| ind.fitness)
-                .min_by(|a, b| a.partial_cmp(b).unwrap())
-                .unwrap();
-
-            let best_acc = population
-                .iter()
-                .map(|ind| ind.mean_acc)
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .max_by(|a, b| a.mean_acc.partial_cmp(&b.mean_acc).unwrap())
                 .unwrap();
 
             println!(
-                "solved={}, pop best: fitness={:.3e}, accuracy={:.3}, stagnant={}, select={}",
+                "solved={}, best: id={}, fitness={:.3e}, accuracy={:.3}, stagnant={}, select={}, sigma={:.2}",
                 solved.len(),
-                best_fitness,
-                best_acc,
+                best.id,
+                best.fitness,
+                best.mean_acc,
                 stagnant_epochs,
-                median(&select_epochs)
+                median(&select_epochs),
+                sigma
             );
 
             metrics.epoch_metrics.push(EpochMetrics {
@@ -100,6 +99,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
         }
 
         population = unsolved.into_iter().cloned().collect_vec();
+        sigma -= sigma_decay;
     }
 
     population.extend(solved);
@@ -130,7 +130,7 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
     }
 }
 
-fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, config: Config, rng: &mut impl Rng) {
+fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, config: Config, sigma: f64, rng: &mut impl Rng) {
     let seeds: Vec<u64> = (0..population.len()).map(|_| rng.random()).collect();
 
     population.par_iter_mut().enumerate().for_each(|(i, individual)| {
@@ -151,7 +151,7 @@ fn solve_pop(population: &mut Vec<IndividualState>, task: &Task, config: Config,
             .map(|&i| all_params[i] as f64)
             .collect();
 
-        let mut es_state = LMCMAOptions::new(initial_mean, config.initial_sigma)
+        let mut es_state = LMCMAOptions::new(initial_mean, sigma)
             .tol_fun_hist(1e-12)
             .fun_target(1e-7)
             .seed(seeds[i])
