@@ -49,9 +49,7 @@ impl NCAExecutorCpu {
             self.sup_steps += 1;
             self.rec_steps = 0;
             self.hid_steps = 0;
-        }
-
-        if self.hid_steps >= self.nca.hid_steps {
+        } else if self.hid_steps >= self.nca.hid_steps {
             self.update_rw();
             self.rec_steps += 1;
             self.hid_steps = 0;
