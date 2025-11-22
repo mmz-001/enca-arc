@@ -37,18 +37,17 @@ extern "C" __device__ void nca_update(float *__restrict__ sub, const int height,
         const int n_base = (ny * width + nx) * INP_CHS;
 
         #pragma unroll
-        for (int inCh = 0; inCh < INP_CHS; inCh++) {
-
-            const float neigh_val = sub[n_base + inCh];
+        for (int inp_ch = 0; inp_ch < INP_CHS; inp_ch++) {
+            const int row_idx = ni * INP_CHS + inp_ch;
+            const float neigh_val = sub[n_base + inp_ch];
 
             // Alive masking
             if (neigh_val < 0.5f) {
                 continue;
             }
 
-            const int col_idx = inCh * NHBD_LEN + ni;
             for (int out_ch = 0; out_ch < OUT_CHS; out_ch++) {
-                int wi = col_idx * OUT_CHS + out_ch;
+                int wi = row_idx * OUT_CHS + out_ch;
                 out_buf[out_ch] += neigh_val * weights[wi];
             }
         }

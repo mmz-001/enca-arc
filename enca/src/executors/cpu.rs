@@ -1,5 +1,5 @@
 use crate::{
-    constants::{INP_CHS, NHBD, NHBD_LEN, OUT_CHS, VIS_CHS},
+    constants::{INP_CHS, NHBD, OUT_CHS, VIS_CHS},
     grid::Grid,
     nca::NCA,
     substrate::Substrate,
@@ -69,6 +69,7 @@ impl NCAExecutorCpu {
                     };
 
                     for inp_ch_idx in 0..INP_CHS {
+                        let row_idx = ni * INP_CHS + inp_ch_idx;
                         let neighbor_val = data[(ny as usize, nx as usize, inp_ch_idx)];
 
                         // Alive masking
@@ -76,10 +77,8 @@ impl NCAExecutorCpu {
                             continue;
                         }
 
-                        let col_idx = inp_ch_idx * NHBD_LEN + ni;
-
                         for i in 0..OUT_CHS {
-                            let wi = col_idx * OUT_CHS + i;
+                            let wi = row_idx * OUT_CHS + i;
                             out_buf[i] = f32::mul_add(neighbor_val, self.nca.weights[wi], out_buf[i]);
                         }
                     }
