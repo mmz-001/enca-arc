@@ -99,6 +99,10 @@ pub fn train(task: &Task, verbose: bool, config: &Config, rng: &mut impl Rng) ->
 
         population = unsolved.into_iter().cloned().collect_vec();
         sigma -= sigma_decay;
+
+        if solved.len() >= 50 {
+            break;
+        }
     }
 
     population.extend(solved);
