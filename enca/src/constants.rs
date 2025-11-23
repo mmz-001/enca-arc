@@ -22,7 +22,7 @@ pub const NHBD_CENTER: usize = NHBD_LEN / 2;
 /// Number of visible channels (RO or RW)
 pub const VIS_CHS: usize = 4;
 /// Number of hidden channels
-pub const HID_CHS: usize = 2;
+pub const HID_CHS: usize = 4;
 
 /// Identity color map
 pub const I_COL_MAP: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];

@@ -1,6 +1,6 @@
 static constexpr int NHBD_LEN = 5;
 static constexpr int VIS_CHS = 4;
-static constexpr int HID_CHS = 2;
+static constexpr int HID_CHS = 4;
 static constexpr int INP_CHS = VIS_CHS * 2 + HID_CHS;
 static constexpr int OUT_CHS = VIS_CHS + HID_CHS;
 static constexpr int INP_DIM = NHBD_LEN * INP_CHS;
