@@ -138,7 +138,7 @@ impl NCAExecutorCpu {
                     };
 
                     // Only rw and hidden
-                    for ch_idx in VIS_CHS..INP_CHS {
+                    for ch_idx in 0..INP_CHS {
                         let row_idx = ni * INP_CHS + ch_idx;
                         let neighbor_val = data[(ny as usize, nx as usize, ch_idx)];
 

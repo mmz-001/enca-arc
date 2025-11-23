@@ -85,7 +85,7 @@ extern "C" __device__ void nca_update_rw(float *__restrict__ sub, const int heig
         const int n_base = (ny * width + nx) * INP_CHS;
 
         #pragma unroll
-        for (int ch_idx = VIS_CHS; ch_idx < INP_CHS; ch_idx++) {
+        for (int ch_idx = 0; ch_idx < INP_CHS; ch_idx++) {
             const int row_idx = ni * INP_CHS + ch_idx;
             const float neigh_val = sub[n_base + ch_idx];
 
