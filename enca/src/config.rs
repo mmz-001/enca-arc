@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::executors::Backend;
+use crate::{constants::N_PARAMS, executors::Backend};
 
 /// Hyperparameters for the ENCA algorithm
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -34,7 +34,7 @@ impl Default for Config {
             hid_steps: 12,
             pop: 12,
             k: 2,
-            subset_size: 488,
+            subset_size: N_PARAMS,
             max_fun_evals: 1000,
             l2_coeff: 5e-5,
             backend: Backend::GPU,
