@@ -31,7 +31,7 @@ impl Default for Config {
         Self {
             epochs: 50,
             vis_steps: 12,
-            hid_steps: 6,
+            hid_steps: 12,
             pop: 12,
             k: 2,
             subset_size: 488,
