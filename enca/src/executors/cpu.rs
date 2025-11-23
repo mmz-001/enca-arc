@@ -9,8 +9,7 @@ use crate::{
 #[derive(Clone)]
 pub struct NCAExecutorCpu {
     pub nca: NCA,
-    pub sup_steps: usize,
-    pub rec_steps: usize,
+    pub vis_steps: usize,
     pub hid_steps: usize,
     pub substrate: Substrate,
 }
@@ -24,8 +23,7 @@ impl NCAExecutorCpu {
 
         Self {
             nca,
-            sup_steps: 0,
-            rec_steps: 0,
+            vis_steps: 0,
             hid_steps: 0,
             substrate,
         }
@@ -41,17 +39,13 @@ impl NCAExecutorCpu {
 
     /// Executes one iteration step.
     pub fn step(&mut self) -> bool {
-        if self.sup_steps >= self.nca.sup_steps {
+        if self.vis_steps >= self.nca.vis_steps {
             return true;
         }
 
-        if self.rec_steps >= self.nca.rec_steps {
-            self.sup_steps += 1;
-            self.rec_steps = 0;
-            self.hid_steps = 0;
-        } else if self.hid_steps >= self.nca.hid_steps {
+        if self.hid_steps >= self.nca.hid_steps {
             self.update_rw();
-            self.rec_steps += 1;
+            self.vis_steps += 1;
             self.hid_steps = 0;
         } else {
             self.update_hidden();

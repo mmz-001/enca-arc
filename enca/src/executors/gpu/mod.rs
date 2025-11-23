@@ -100,8 +100,7 @@ impl PopNCAExecutorGpuBatch {
             panic!("Grids with more than 1024 elements not supported.")
         }
 
-        let steps_all_equal = self.individuals.iter().map(|ind| ind.nca.sup_steps).all_equal()
-            && self.individuals.iter().map(|ind| ind.nca.rec_steps).all_equal()
+        let steps_all_equal = self.individuals.iter().map(|ind| ind.nca.vis_steps).all_equal()
             && self.individuals.iter().map(|ind| ind.nca.hid_steps).all_equal();
 
         if !steps_all_equal {
@@ -141,8 +140,7 @@ impl PopNCAExecutorGpuBatch {
         let d_pop_nca_params = stream.clone_htod(&pop_nca_params).unwrap();
         let d_heights = stream.clone_htod(&heights).unwrap();
         let d_widths = stream.clone_htod(&widths).unwrap();
-        let sup_steps = self.individuals[0].nca.sup_steps as i32;
-        let rec_steps = self.individuals[0].nca.rec_steps as i32;
+        let sup_steps = self.individuals[0].nca.vis_steps as i32;
         let hid_steps = self.individuals[0].nca.hid_steps as i32;
 
         let n_grids = substrates_0.len() as i32;
@@ -153,7 +151,6 @@ impl PopNCAExecutorGpuBatch {
         builder.arg(&d_heights);
         builder.arg(&d_widths);
         builder.arg(&sup_steps);
-        builder.arg(&rec_steps);
         builder.arg(&hid_steps);
         builder.arg(&max_grid_size);
 

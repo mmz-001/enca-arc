@@ -56,17 +56,10 @@ impl NCAExecutor {
         }
     }
 
-    pub fn sup_steps(&self) -> usize {
+    pub fn vis_steps(&self) -> usize {
         match &self.inner {
-            NCAExecutorInner::Cpu(cpu) => cpu.sup_steps,
-            NCAExecutorInner::Gpu(_) => panic!("sup_steps not implemented for GPU backend"),
-        }
-    }
-
-    pub fn rec_steps(&self) -> usize {
-        match &self.inner {
-            NCAExecutorInner::Cpu(cpu) => cpu.rec_steps,
-            NCAExecutorInner::Gpu(_) => panic!("rec_steps not implemented for GPU backend"),
+            NCAExecutorInner::Cpu(cpu) => cpu.vis_steps,
+            NCAExecutorInner::Gpu(_) => panic!("vis_steps not implemented for GPU backend"),
         }
     }
 

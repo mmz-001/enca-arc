@@ -18,10 +18,8 @@ fn main() {
     for task in &train_dataset.tasks {
         let mut config = Config::default();
         let sup_steps = rng.random_range(1..=16);
-        let rec_steps = rng.random_range(1..=3);
         let hid_steps = rng.random_range(1..=6);
-        config.sup_steps = sup_steps;
-        config.rec_steps = rec_steps;
+        config.vis_steps = sup_steps;
         config.hid_steps = hid_steps;
 
         let pop_ncas = (0..pop_size)

@@ -113,7 +113,7 @@ extern "C" __device__ void nca_update_rw(float *__restrict__ sub, const int heig
 extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_subs,
                                                       const float *__restrict__ pop_params,
                                                       const int *__restrict__ heights, const int *__restrict__ widths,
-                                                      const int sup_steps, const int rec_steps, const int hid_steps, const int max_grid_size) {
+                                                      const int vis_steps, const int hid_steps, const int max_grid_size) {
     int height = heights[blockIdx.x];
     int width = widths[blockIdx.x];
     int size = height * width;
@@ -141,15 +141,13 @@ extern "C" __global__ void pop_nca_executor_run_batch(float *__restrict__ pop_su
     }
 
 
-    for (int i = 0; i < sup_steps; i++) {
-        for (int j = 0; j < rec_steps; j++) {
-            for (int k = 0; k < hid_steps; k++) {
+    for (int i = 0; i < vis_steps; i++) {
+            for (int j = 0; j < hid_steps; j++) {
                 __syncthreads();
                 nca_update_hidden(sub_s, height, width, weights_s, biases_s);
             }
             __syncthreads();
             nca_update_rw(sub_s, height, width, weights_s, biases_s);
-        }
     }
 
     __syncthreads();

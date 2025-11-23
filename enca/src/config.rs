@@ -7,8 +7,9 @@ use crate::executors::Backend;
 pub struct Config {
     /// Number of epochs for the evolutionary loop
     pub epochs: usize,
-    pub sup_steps: usize,
-    pub rec_steps: usize,
+    /// NCA visible RW steps
+    pub vis_steps: usize,
+    /// NCA hidden steps per vis_step
     pub hid_steps: usize,
     /// Population size for evolutionary loop
     pub pop: usize,
@@ -29,13 +30,12 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             epochs: 50,
-            sup_steps: 8,
-            rec_steps: 3,
+            vis_steps: 12,
             hid_steps: 6,
             pop: 12,
             k: 2,
             subset_size: 488,
-            max_fun_evals: 500,
+            max_fun_evals: 1000,
             l2_coeff: 5e-5,
             backend: Backend::GPU,
         }

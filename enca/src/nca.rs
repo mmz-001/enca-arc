@@ -15,8 +15,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 pub struct NCA {
     pub weights: Vec<f32>,
     pub biases: Vec<f32>,
-    pub sup_steps: usize,
-    pub rec_steps: usize,
+    pub vis_steps: usize,
     pub hid_steps: usize,
     pub transform_pipeline: TransformPipeline,
 }
@@ -29,8 +28,7 @@ impl NCA {
         Self {
             weights,
             biases,
-            sup_steps: config.sup_steps,
-            rec_steps: config.rec_steps,
+            vis_steps: config.vis_steps,
             hid_steps: config.hid_steps,
             transform_pipeline: TransformPipeline::default(),
         }
